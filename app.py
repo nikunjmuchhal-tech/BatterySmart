@@ -62,7 +62,7 @@ def parse_date(val):
 
 
 def build_queue(df):
-    today = date.today()
+    today = today_ist()
     rows = []
 
     for i, row in df.iterrows():
