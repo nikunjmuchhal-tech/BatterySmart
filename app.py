@@ -66,12 +66,12 @@ def build_queue(df):
     rows = []
 
     for i, row in df.iterrows():
-        sheet_row = i + 2  # header is row 1
+        sheet_row = i + 2
 
-        d1_date = parse_date(row.get("D1_Due_Date"))
-        d2_date = parse_date(row.get("D2_Due_Date"))
-        d1_status = row.get("D1_Status", "Pending")
-        d2_status = row.get("D2_Status", "Pending")
+        d1_date = parse_date(row.get("D_1_Date"))
+        d2_date = parse_date(row.get("D+2 Date"))
+        d1_status = row.get("D_1 Status", "Pending")
+        d2_status = row.get("D_2_Status", "Pending")
 
         if d1_date and d1_date <= today and d1_status != "Connected":
             overdue = (today - d1_date).days
@@ -80,8 +80,8 @@ def build_queue(df):
                 "driver_id": row.get("Driver_ID"), "driver_name": row.get("Driver_Name"),
                 "zone": row.get("Zone"), "onboarding_date": row.get("Onboarding_Date"),
                 "due_date": d1_date, "overdue_days": overdue,
-                "status_col": "D1_Status", "notes_col": "D1_Notes",
-                "current_status": d1_status, "current_notes": row.get("D1_Notes", ""),
+                "status_col": "D_1 Status", "notes_col": "D_1_Notes",
+                "current_status": d1_status, "current_notes": row.get("D_1_Notes", ""),
                 "script": D1_SCRIPT.format(name=row.get("Driver_Name")),
             })
 
@@ -92,8 +92,8 @@ def build_queue(df):
                 "driver_id": row.get("Driver_ID"), "driver_name": row.get("Driver_Name"),
                 "zone": row.get("Zone"), "onboarding_date": row.get("Onboarding_Date"),
                 "due_date": d2_date, "overdue_days": overdue,
-                "status_col": "D2_Status", "notes_col": "D2_Notes",
-                "current_status": d2_status, "current_notes": row.get("D2_Notes", ""),
+                "status_col": "D_2_Status", "notes_col": "D_2_Notes",
+                "current_status": d2_status, "current_notes": row.get("D_2_Notes", ""),
                 "script": D2_SCRIPT.format(name=row.get("Driver_Name")),
             })
 
@@ -102,6 +102,11 @@ def build_queue(df):
 
 
 def save_update(sheet, df, sheet_row, status_col, notes_col, status, notes):
+    header = df.columns.tolist()
+    status_col_idx = header.index(status_col) + 1
+    notes_col_idx = header.index(notes_col) + 1
+    sheet.update_cell(sheet_row, status_col_idx, status)
+    sheet.update_cell(sheet_row, notes_col_idx, notes)def save_update(sheet, df, sheet_row, status_col, notes_col, status, notes):
     header = df.columns.tolist()
     status_col_idx = header.index(status_col) + 1
     notes_col_idx = header.index(notes_col) + 1
