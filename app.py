@@ -1,6 +1,12 @@
 import streamlit as st
 import pandas as pd
 from datetime import date
+from zoneinfo import ZoneInfo
+
+IST = ZoneInfo("Asia/Kolkata")
+
+def today_ist():
+    return datetime.now(IST).date()
 import gspread
 from google.oauth2.service_account import Credentials
 
