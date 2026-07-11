@@ -40,7 +40,7 @@ def parse_date(val):
     if not val:
         return None
     try:
-        return pd.to_datetime(val).date()
+        return pd.to_datetime(val, dayfirst=True).date()
     except Exception:
         return None
 def build_queue(df):
