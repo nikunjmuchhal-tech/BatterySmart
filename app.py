@@ -69,7 +69,7 @@ def build_queue(df):
         sheet_row = i + 2
 
         d1_date = parse_date(row.get("D_1_Date"))
-        d2_date = parse_date(row.get("D+2 Date"))
+        d2_date = parse_date(row.get("D_2_Date"))
         d1_status = row.get("D_1 Status", "Pending")
         d2_status = row.get("D_2_Status", "Pending")
 
