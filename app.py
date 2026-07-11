@@ -106,11 +106,6 @@ def save_update(sheet, df, sheet_row, status_col, notes_col, status, notes):
     status_col_idx = header.index(status_col) + 1
     notes_col_idx = header.index(notes_col) + 1
     sheet.update_cell(sheet_row, status_col_idx, status)
-    sheet.update_cell(sheet_row, notes_col_idx, notes)def save_update(sheet, df, sheet_row, status_col, notes_col, status, notes):
-    header = df.columns.tolist()
-    status_col_idx = header.index(status_col) + 1
-    notes_col_idx = header.index(notes_col) + 1
-    sheet.update_cell(sheet_row, status_col_idx, status)
     sheet.update_cell(sheet_row, notes_col_idx, notes)
 
 
