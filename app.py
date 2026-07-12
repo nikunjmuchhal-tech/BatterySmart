@@ -257,4 +257,160 @@ def render_tab(items, sheet, df, key_prefix):
         render_detail(item, sheet, df, unique_key)
 
 
-def render_metric(label,
+def render_metric(label, value):
+    html = "<div class='metric-box'><div class='metric-num'>" + str(value) + "</div><div class='metric-label'>" + label + "</div></div>"
+    st.markdown(html, unsafe_allow_html=True)
+
+
+def show_table(df_table):
+    st.dataframe(
+        df_table,
+        use_container_width=False,
+        hide_index=True,
+        column_config={
+            "Driver Name": st.column_config.TextColumn(width="medium"),
+            "Driver ID": st.column_config.TextColumn(width="small"),
+            "Contact Number": st.column_config.TextColumn(width="small"),
+            "USC ID": st.column_config.TextColumn(width="small"),
+            "Fee Amount": st.column_config.TextColumn(width="small"),
+        },
+    )
+
+
+def render_dashboard_stage(stage_name, items):
+    st.subheader(stage_name)
+
+    total = len(items)
+    counts = {}
+    for opt in STATUS_OPTIONS:
+        counts[opt] = []
+    for item in items:
+        status = item["current_status"]
+        if status not in counts:
+            counts[status] = []
+        counts[status].append(item)
+
+    connected = len(counts.get("Connected", []))
+    pending = len(counts.get("Pending", []))
+    not_connected = len(counts.get("Not Connected", []))
+    incoming_na = len(counts.get("Incoming Not Available", []))
+    followup = len(counts.get("FollowUp Scheduled", []))
+    attempted = total - pending
+
+    cols = st.columns(6)
+    with cols[0]:
+        render_metric("Total Due", total)
+    with cols[1]:
+        render_metric("Attempted", attempted)
+    with cols[2]:
+        render_metric("Connected", connected)
+    with cols[3]:
+        render_metric("Not Connected", not_connected)
+    with cols[4]:
+        render_metric("No Incoming", incoming_na)
+    with cols[5]:
+        render_metric("Follow-up", followup)
+
+    if total > 0:
+        progress = attempted / total
+    else:
+        progress = 0
+    st.progress(progress, text=str(attempted) + " / " + str(total) + " attempted today")
+
+    for status_name in STATUS_OPTIONS:
+        group = counts.get(status_name, [])
+        label = status_name + " (" + str(len(group)) + ")"
+        with st.expander(label):
+            if not group:
+                st.caption("Nobody in this category.")
+            else:
+                rows = []
+                for g in group:
+                    rows.append({
+                        "Driver Name": str(g["driver_name"]),
+                        "Driver ID": str(g["driver_id"]),
+                        "Contact Number": str(g["contact_number"]),
+                        "USC ID": str(g["usc_id"]),
+                    })
+                show_table(pd.DataFrame(rows))
+
+    if stage_name == "D+1 Calls":
+        st.markdown("**DFE Fees Asked Breakdown**")
+        dfe_groups = {}
+        for opt in DFE_OPTIONS:
+            dfe_groups[opt] = []
+        for item in items:
+            dfe_val = item["dfe_status"]
+            if dfe_val not in dfe_groups:
+                dfe_groups[dfe_val] = []
+            dfe_groups[dfe_val].append(item)
+
+        dfe_cols = st.columns(3)
+        with dfe_cols[0]:
+            render_metric("Not Checked", len(dfe_groups.get("Not Checked", [])))
+        with dfe_cols[1]:
+            render_metric("Yes (Fees Asked)", len(dfe_groups.get("Yes", [])))
+        with dfe_cols[2]:
+            render_metric("No (Not Asked)", len(dfe_groups.get("No", [])))
+
+        for dfe_name in DFE_OPTIONS:
+            group = dfe_groups.get(dfe_name, [])
+            label = "DFE: " + dfe_name + " (" + str(len(group)) + ")"
+            with st.expander(label):
+                if not group:
+                    st.caption("Nobody in this category.")
+                else:
+                    rows = []
+                    for g in group:
+                        rows.append({
+                            "Driver Name": str(g["driver_name"]),
+                            "Driver ID": str(g["driver_id"]),
+                            "Contact Number": str(g["contact_number"]),
+                            "USC ID": str(g["usc_id"]),
+                            "Fee Amount": str(g["dfe_amount"]),
+                        })
+                    show_table(pd.DataFrame(rows))
+
+    if pending == 0 and total > 0:
+        st.success(stage_name + " is fully done for today!")
+    elif total > 0:
+        st.warning(str(pending) + " driver(s) still pending for " + stage_name)
+
+
+def main():
+    st.title("📞 Battery Smart — Onboarding Calls")
+    st.caption("Financed (L5) drivers — D+1 / D+2 welcome calls")
+
+    if not check_password():
+        return
+
+    sheet = get_sheet()
+    df = load_data(sheet)
+    d1_list, d2_list = build_lists(df)
+
+    view = st.radio("View", ["📞 Calling Sheet", "📊 Manager Dashboard"], horizontal=True, label_visibility="collapsed")
+
+    st.divider()
+
+    if view == "📞 Calling Sheet":
+        tab1_label = "🟢 D+1 Calls (" + str(len(d1_list)) + ")"
+        tab2_label = "🟠 D+2 Calls (" + str(len(d2_list)) + ")"
+        tab1, tab2 = st.tabs([tab1_label, tab2_label])
+
+        with tab1:
+            render_tab(d1_list, sheet, df, "d1")
+
+        with tab2:
+            render_tab(d2_list, sheet, df, "d2")
+    else:
+        render_dashboard_stage("D+1 Calls", d1_list)
+        st.divider()
+        render_dashboard_stage("D+2 Calls", d2_list)
+        st.divider()
+        if st.button("🔄 Refresh Now"):
+            load_data.clear()
+            st.rerun()
+
+
+if __name__ == "__main__":
+    main()
