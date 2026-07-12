@@ -95,6 +95,7 @@ def build_lists(df):
         base["vehicle_model"] = row.get("Vehicle_Model")
         base["total_signup_amount"] = row.get("Total_Signup_Amount")
         base["amount_paid"] = row.get("Amount_Paid")
+        base["plan_amount"] = row.get("Plan_Amount")
 
         if d1_date == today and d1_status != "Connected":
             item = dict(base)
@@ -158,10 +159,11 @@ def render_section(items, sheet, df, key_prefix):
             st.markdown("<div class='detail-label'>Contact Number</div><div class='detail-value'>" + str(item['contact_number']) + "</div>", unsafe_allow_html=True)
             st.markdown("<div class='detail-label'>Zone</div><div class='detail-value'>" + str(item['zone']) + "</div>", unsafe_allow_html=True)
             st.markdown("<div class='detail-label'>Onboarding Date</div><div class='detail-value'>" + str(item['onboarding_date']) + "</div>", unsafe_allow_html=True)
-        with c2:
             st.markdown("<div class='detail-label'>Dealership</div><div class='detail-value'>" + str(item['dealership']) + "</div>", unsafe_allow_html=True)
+        with c2:
             st.markdown("<div class='detail-label'>Vehicle</div><div class='detail-value'>" + str(item['vehicle_model']) + "</div>", unsafe_allow_html=True)
             st.markdown("<div class='detail-label'>Vehicle Price / Amount Paid</div><div class='detail-value'>Rs " + str(item['total_signup_amount']) + " / Rs " + str(item['amount_paid']) + "</div>", unsafe_allow_html=True)
+            st.markdown("<div class='detail-label'>Plan Amount (EMI/Subscription)</div><div class='detail-value'>Rs " + str(item['plan_amount']) + "</div>", unsafe_allow_html=True)
 
         st.info("**Script:** " + item["script"])
 
