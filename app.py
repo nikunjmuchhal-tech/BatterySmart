@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 IST = ZoneInfo("Asia/Kolkata")
 def today_ist():
@@ -13,8 +13,13 @@ st.set_page_config(page_title="Battery Smart - Onboarding Calls", layout="wide",
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 SHEET_TAB = "Call Logs"
 
-D1_SCRIPT = "Hello {name}, welcome to Battery Smart! This is a courtesy call to confirm you're settling in well. Any questions about onboarding, your plan, or the app?"
-D2_SCRIPT = "Hello {name}, following up — how has your experience been? Started using the vehicle regularly? Any issues with the battery or swap process?"
+MAX_STAGE = 7
+
+STAGE_SCRIPTS = {
+    1: "Hello {name}, welcome to Battery Smart! This is a courtesy call to confirm you're settling in well. Any questions about onboarding, your plan, or the app?",
+    2: "Hello {name}, following up — how has your experience been? Started using the vehicle regularly? Any issues with the battery or swap process?",
+}
+DEFAULT_SCRIPT = "Hello {name}, this is a scheduled follow-up call from Battery Smart. Checking in on how things are going and if you need any help."
 
 STATUS_OPTIONS = ["Pending", "Connected", "Not Connected", "Incoming Not Available", "FollowUp Scheduled"]
 DFE_OPTIONS = ["Not Checked", "Yes", "No"]
@@ -27,16 +32,19 @@ STATUS_DOT = {
     "FollowUp Scheduled": "🔵",
 }
 
-STATUS_COLOR = {
-    "Pending": "#9ca3af",
-    "Connected": "#16a34a",
-    "Not Connected": "#eab308",
-    "Incoming Not Available": "#dc2626",
-    "FollowUp Scheduled": "#2563eb",
-}
-
 BRAND_GREEN = "#00C389"
 BRAND_NAVY = "#151272"
+
+METRIC_ICONS = {
+    "Total Due": "📋",
+    "Attempted": "☎️",
+    "Connected": "✅",
+    "Not Connected": "🕗",
+    "No Incoming": "🚫",
+    "Follow-up": "🔁",
+}
+
+LOGO_SVG = "<svg width='46' height='46' viewBox='0 0 300 470' style='vertical-align:middle; margin-right:12px;'><rect x='95' y='0' width='110' height='45' rx='8' fill='#00C389'/><path d='M20 65 C5 65 0 80 10 92 L140 240 L10 388 C0 400 5 415 20 415 L280 415 C295 415 300 400 290 388 L160 240 L290 92 C300 80 295 65 280 65 Z M100 130 L200 130 L150 190 Z M100 350 L200 350 L150 290 Z' fill='#00C389'/></svg>"
 
 st.markdown(
     "<style>"
@@ -59,8 +67,6 @@ st.markdown(
     ".stTabs [data-baseweb='tab'] { font-size: 1.1rem !important; font-weight: 600; padding: 10px 20px !important; background: white; border-radius: 10px 10px 0 0; }"
     ".stTabs [data-baseweb='tab-list'] { gap: 8px; border-bottom: 2px solid #e5e7eb; }"
     ".stTabs [aria-selected='true'] { color: " + BRAND_GREEN + " !important; border-bottom: 3px solid " + BRAND_GREEN + " !important; }"
-    "div[data-testid='stMarkdownContainer'] p { font-size: 1.0rem; }"
-    ".detail-card { background: white; border-radius: 16px; padding: 20px 24px; box-shadow: 0 2px 12px rgba(21,18,114,0.08); border: 1px solid #eef0ff; }"
     ".detail-name { font-size: 1.4rem; font-weight: 700; margin-bottom: 2px; color:" + BRAND_NAVY + "; }"
     ".detail-sub { font-size: 0.9rem; color: #6b7280; margin-bottom: 12px; }"
     ".detail-label { font-size: 0.72rem; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.5px; }"
@@ -74,6 +80,15 @@ st.markdown(
     "div.stButton > button[kind='secondary'] { border: 1px solid #e5e7eb; }"
     "[data-testid='stDataFrame'] { border-radius: 12px; overflow: hidden; border: 1px solid #e5e7eb; }"
     ".stProgress > div > div { background-color: " + BRAND_GREEN + " !important; }"
+    "[data-testid='stTextInput'] input { background-color: #f9fafb !important; color: #111827 !important; border: 1px solid #d1d5db !important; }"
+    "[data-testid='stTextInput'] input::placeholder { color: #9ca3af !important; }"
+    "[data-baseweb='select'] > div { background-color: #f9fafb !important; color: #111827 !important; border: 1px solid #d1d5db !important; }"
+    "[data-baseweb='select'] input { color: #111827 !important; }"
+    "[data-baseweb='select'] span { color: #111827 !important; }"
+    "ul[data-testid='stSelectboxVirtualDropdown'] { background-color: #ffffff !important; }"
+    "ul[data-testid='stSelectboxVirtualDropdown'] li { color: #111827 !important; }"
+    "li[role='option'] { color: #111827 !important; background-color: #ffffff !important; }"
+    "li[role='option']:hover { background-color: #eafff6 !important; }"
     "</style>",
     unsafe_allow_html=True,
 )
@@ -119,20 +134,33 @@ def parse_date(val):
         return None
 
 
-def build_lists(df):
+def stage_status_col(n):
+    if n == 1:
+        return "D_1 Status"
+    return "D_" + str(n) + "_Status"
+
+
+def stage_date_col(n):
+    return "D_" + str(n) + "_Date"
+
+
+def stage_notes_col(n):
+    return "D_" + str(n) + "_Notes"
+
+
+def stage_script(n, name):
+    template = STAGE_SCRIPTS.get(n, DEFAULT_SCRIPT)
+    return template.format(name=name)
+
+
+def build_all_stage_lists(df):
     today = today_ist()
-    d1_list = []
-    d2_list = []
+    stage_lists = {}
+    for n in range(1, MAX_STAGE + 1):
+        stage_lists[n] = []
 
     for i, row in df.iterrows():
         sheet_row = i + 2
-
-        d1_date = parse_date(row.get("D_1_Date"))
-        d2_date = parse_date(row.get("D_2_Date"))
-        d1_status = row.get("D_1 Status", "Pending") or "Pending"
-        d2_status = row.get("D_2_Status", "Pending") or "Pending"
-        dfe_status = row.get("DFE_Fees_Asked", "Not Checked") or "Not Checked"
-        dfe_amount = row.get("DFE_Fee_Amount", "")
 
         base = {}
         base["sheet_row"] = sheet_row
@@ -146,43 +174,38 @@ def build_lists(df):
         base["total_signup_amount"] = row.get("Total_Signup_Amount")
         base["amount_paid"] = row.get("Amount_Paid")
         base["plan_amount"] = row.get("Plan_Amount")
-        base["dfe_status"] = dfe_status
-        base["dfe_amount"] = dfe_amount
+        base["dfe_status"] = row.get("DFE_Fees_Asked", "Not Checked") or "Not Checked"
+        base["dfe_amount"] = row.get("DFE_Fee_Amount", "")
         base["usc_id"] = row.get("USC_ID")
 
-        if d1_date == today:
-            item = dict(base)
-            item["stage"] = "D+1"
-            item["due_date"] = d1_date
-            item["status_col"] = "D_1 Status"
-            item["notes_col"] = "D_1_Notes"
-            item["current_status"] = d1_status
-            item["current_notes"] = row.get("D_1_Notes", "")
-            item["script"] = D1_SCRIPT.format(name=row.get("Driver_Name"))
-            d1_list.append(item)
+        for n in range(1, MAX_STAGE + 1):
+            due_date = parse_date(row.get(stage_date_col(n)))
+            if due_date == today:
+                item = dict(base)
+                item["stage_num"] = n
+                item["stage"] = "D+" + str(n)
+                item["due_date"] = due_date
+                item["status_col"] = stage_status_col(n)
+                item["notes_col"] = stage_notes_col(n)
+                item["current_status"] = row.get(stage_status_col(n), "Pending") or "Pending"
+                item["current_notes"] = row.get(stage_notes_col(n), "")
+                item["script"] = stage_script(n, row.get("Driver_Name"))
+                stage_lists[n].append(item)
 
-        if d2_date == today:
-            item = dict(base)
-            item["stage"] = "D+2"
-            item["due_date"] = d2_date
-            item["status_col"] = "D_2_Status"
-            item["notes_col"] = "D_2_Notes"
-            item["current_status"] = d2_status
-            item["current_notes"] = row.get("D_2_Notes", "")
-            item["script"] = D2_SCRIPT.format(name=row.get("Driver_Name"))
-            d2_list.append(item)
-
-    return d1_list, d2_list
+    return stage_lists
 
 
 def save_call(sheet, df, sheet_row, updates):
     header = df.columns.tolist()
     batch = []
     for col_name in updates:
+        if col_name not in header:
+            continue
         col_idx = header.index(col_name) + 1
         cell_range = gspread.utils.rowcol_to_a1(sheet_row, col_idx)
         batch.append({"range": cell_range, "values": [[updates[col_name]]]})
-    sheet.batch_update(batch)
+    if batch:
+        sheet.batch_update(batch)
 
 
 def fmt_val(val):
@@ -202,7 +225,7 @@ def fmt_money(val):
 def render_detail(item, sheet, df, unique_key):
     detail_box = st.container(border=True)
     with detail_box:
-        name_html = "<div class='detail-name'>" + str(item['driver_name']) + "</div><div class='detail-sub'>Driver ID: " + str(item['driver_id']) + " &nbsp;|&nbsp; USC ID: " + fmt_val(item['usc_id']) + "</div>"
+        name_html = "<div class='detail-name'>" + str(item['driver_name']) + "</div><div class='detail-sub'>Driver ID: " + str(item['driver_id']) + " &nbsp;|&nbsp; USC ID: " + fmt_val(item['usc_id']) + " &nbsp;|&nbsp; Stage: " + item["stage"] + "</div>"
         st.markdown(name_html, unsafe_allow_html=True)
 
         tel_number = str(item['contact_number']).strip()
@@ -258,7 +281,7 @@ def render_detail(item, sheet, df, unique_key):
 
     dfe_value = None
     dfe_amount_value = ""
-    if item["stage"] == "D+1":
+    if item["stage_num"] == 1:
         dfe_key = "dfe_" + unique_key
         dfe_default_idx = 0
         if item["dfe_status"] in DFE_OPTIONS:
@@ -273,6 +296,10 @@ def render_detail(item, sheet, df, unique_key):
                 existing_amount = str(item["dfe_amount"]) if item["dfe_amount"] else ""
                 dfe_amount_value = st.text_input("Fee amount asked (Rs)", value=existing_amount, key=dfe_amount_key)
 
+    if status == "FollowUp Scheduled" and item["stage_num"] < MAX_STAGE:
+        next_n = item["stage_num"] + 1
+        st.caption("This driver will automatically appear under D+" + str(next_n) + " tomorrow for the follow-up call.")
+
     save_key = "save_" + unique_key
     if st.button("💾 Save", key=save_key, type="primary", use_container_width=True):
         updates = {}
@@ -284,6 +311,13 @@ def render_detail(item, sheet, df, unique_key):
                 updates["DFE_Fee_Amount"] = dfe_amount_value
             else:
                 updates["DFE_Fee_Amount"] = ""
+
+        if status == "FollowUp Scheduled" and item["stage_num"] < MAX_STAGE:
+            next_n = item["stage_num"] + 1
+            tomorrow = today_ist() + timedelta(days=1)
+            updates[stage_date_col(next_n)] = tomorrow.strftime("%d/%m/%Y")
+            updates[stage_status_col(next_n)] = "Pending"
+
         save_call(sheet, df, item["sheet_row"], updates)
         load_data.clear()
         st.success("Saved!")
@@ -337,7 +371,7 @@ def render_metric(label, value):
     st.markdown(html, unsafe_allow_html=True)
 
 
-def render_dashboard_stage(items):
+def render_dashboard_stage(items, is_stage_1):
     total = len(items)
     counts = {}
     for opt in STATUS_OPTIONS:
@@ -399,7 +433,7 @@ def render_dashboard_stage(items):
             "USC ID": str(g["usc_id"]),
             "Status": g["current_status"],
         }
-        if g.get("stage") == "D+1":
+        if is_stage_1:
             row["DFE Asked"] = g["dfe_status"]
             row["Fee Amount"] = str(g["dfe_amount"]) if g["dfe_amount"] else ""
         all_rows.append(row)
@@ -421,27 +455,24 @@ def render_dashboard_stage(items):
         st.warning(str(pending) + " driver(s) still pending")
 
 
-LOGO_SVG = "<svg width='46' height='46' viewBox='0 0 300 470' style='vertical-align:middle; margin-right:12px;'><rect x='95' y='0' width='110' height='45' rx='8' fill='#00C389'/><path d='M20 65 C5 65 0 80 10 92 L140 240 L10 388 C0 400 5 415 20 415 L280 415 C295 415 300 400 290 388 L160 240 L290 92 C300 80 295 65 280 65 Z M100 130 L200 130 L150 190 Z M100 350 L200 350 L150 290 Z' fill='#00C389'/></svg>"
-METRIC_ICONS = {
-    "Total Due": "📋",
-    "Attempted": "☎️",
-    "Connected": "✅",
-    "Not Connected": "🕗",
-    "No Incoming": "🚫",
-    "Follow-up": "🔁",
-}
-
 def main():
     title_html = "<h1>" + LOGO_SVG + "Battery Smart — Onboarding Calls</h1>"
     st.markdown(title_html, unsafe_allow_html=True)
-    st.caption("Financed (L5) drivers — D+1 / D+2 welcome calls")
+    st.caption("Financed (L5) drivers — D+1 through D+7 calling workflow")
 
     if not check_password():
         return
 
     sheet = get_sheet()
     df = load_data(sheet)
-    d1_list, d2_list = build_lists(df)
+    stage_lists = build_all_stage_lists(df)
+
+    active_stages = [1, 2]
+    for n in range(3, MAX_STAGE + 1):
+        if len(stage_lists[n]) > 0:
+            active_stages.append(n)
+
+    total_due_today = sum(len(stage_lists[n]) for n in range(1, MAX_STAGE + 1))
 
     with st.sidebar:
         sidebar_logo_html = "<div style='display:flex;align-items:center;gap:8px;'>" + LOGO_SVG + "<span style='font-weight:700;font-size:1.1rem;'>Battery Smart</span></div>"
@@ -449,11 +480,12 @@ def main():
         view = st.radio("View", ["📞 Calling Sheet", "📊 Manager Dashboard"], label_visibility="collapsed")
         st.divider()
 
-        d1_stat_html = "<div class='sidebar-stat-box'><div class='sidebar-stat-num'>" + str(len(d1_list)) + "</div><div class='sidebar-stat-label'>D+1 Due Today</div></div>"
-        st.markdown(d1_stat_html, unsafe_allow_html=True)
+        total_stat_html = "<div class='sidebar-stat-box'><div class='sidebar-stat-num'>" + str(total_due_today) + "</div><div class='sidebar-stat-label'>Total Due Today (All Stages)</div></div>"
+        st.markdown(total_stat_html, unsafe_allow_html=True)
 
-        d2_stat_html = "<div class='sidebar-stat-box'><div class='sidebar-stat-num'>" + str(len(d2_list)) + "</div><div class='sidebar-stat-label'>D+2 Due Today</div></div>"
-        st.markdown(d2_stat_html, unsafe_allow_html=True)
+        for n in active_stages:
+            stat_html = "<div class='sidebar-stat-box'><div class='sidebar-stat-num'>" + str(len(stage_lists[n])) + "</div><div class='sidebar-stat-label'>D+" + str(n) + " Due Today</div></div>"
+            st.markdown(stat_html, unsafe_allow_html=True)
 
         st.divider()
         if st.button("🔄 Refresh Data", use_container_width=True):
@@ -461,21 +493,21 @@ def main():
             st.rerun()
 
     if view == "📞 Calling Sheet":
-        tab1_label = "🟢 D+1 Calls (" + str(len(d1_list)) + ")"
-        tab2_label = "🟠 D+2 Calls (" + str(len(d2_list)) + ")"
-        tab1, tab2 = st.tabs([tab1_label, tab2_label])
+        tab_labels = []
+        for n in active_stages:
+            dot = "🟢" if n == 1 else ("🟠" if n == 2 else "🔵")
+            tab_labels.append(dot + " D+" + str(n) + " (" + str(len(stage_lists[n])) + ")")
 
-        with tab1:
-            render_tab(d1_list, sheet, df, "d1")
-
-        with tab2:
-            render_tab(d2_list, sheet, df, "d2")
+        tabs = st.tabs(tab_labels)
+        for idx, n in enumerate(active_stages):
+            with tabs[idx]:
+                render_tab(stage_lists[n], sheet, df, "stage" + str(n))
     else:
-        dash_tab1, dash_tab2 = st.tabs(["D+1 Calls", "D+2 Calls"])
-        with dash_tab1:
-            render_dashboard_stage(d1_list)
-        with dash_tab2:
-            render_dashboard_stage(d2_list)
+        dash_labels = ["D+" + str(n) for n in active_stages]
+        dash_tabs = st.tabs(dash_labels)
+        for idx, n in enumerate(active_stages):
+            with dash_tabs[idx]:
+                render_dashboard_stage(stage_lists[n], n == 1)
 
 
 if __name__ == "__main__":
