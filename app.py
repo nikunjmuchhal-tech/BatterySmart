@@ -479,10 +479,7 @@ def render_call_detail(item, sheet, df, unique_key):
                 load_call_data.clear()
                 msg = "🚨 *Case Escalated* — Onboarding Call\nDriver: " + str(item["driver_name"]) + " (" + str(item["driver_id"]) + ")\nContact: " + str(item["contact_number"]) + "\nUSC: " + fmt_val(item["usc_name"]) + "\nDOM: " + item["dom"] + "\nIssue: " + notes
                 sent, err = send_slack_alert(msg)
-                if sent:
-                    st.toast("Escalated and posted to Slack!", icon="✅")
-                else:
-                    st.toast("Escalated, but Slack failed: " + err, icon="⚠️")
+                st.session_state["last_slack_result"] = (sent, err, item["driver_name"])
                 st.rerun()
 
     with btn3:
@@ -539,10 +536,7 @@ def render_docs_detail(item, sheet, df, unique_key):
                 load_docs_data.clear()
                 msg = "🚨 *Case Escalated* — Documentation\nDriver: " + str(item["driver_name"]) + " (" + str(item["driver_id"]) + ")\nContact: " + str(item["contact_number"]) + "\nUSC: " + fmt_val(item["usc_name"]) + "\nDOM: " + item["dom"] + "\nIssue: " + notes
                 sent, err = send_slack_alert(msg)
-                if sent:
-                    st.toast("Escalated and posted to Slack!", icon="✅")
-                else:
-                    st.toast("Escalated, but Slack failed: " + err, icon="⚠️")
+                st.session_state["last_slack_result"] = (sent, err, item["driver_name"])
                 st.rerun()
 
 
@@ -688,6 +682,13 @@ def main():
 
     if not check_password():
         return
+
+    if "last_slack_result" in st.session_state:
+        sent, err, driver_name = st.session_state.pop("last_slack_result")
+        if sent:
+            st.success("Escalated " + driver_name + " and posted to Slack!")
+        else:
+            st.error("Escalated " + driver_name + ", but Slack failed: " + err)
 
     call_sheet = get_call_sheet()
     docs_sheet = get_docs_sheet()
