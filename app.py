@@ -54,8 +54,9 @@ def get_sheet():
     return spreadsheet.worksheet(SHEET_TAB)
 
 
-def load_data(sheet):
-    records = sheet.get_all_records()
+@st.cache_data(ttl=30)
+def load_data(_sheet):
+    records = _sheet.get_all_records()
     return pd.DataFrame(records)
 
 
@@ -123,8 +124,10 @@ def save_update(sheet, df, sheet_row, status_col, notes_col, status, notes):
     header = df.columns.tolist()
     status_col_idx = header.index(status_col) + 1
     notes_col_idx = header.index(notes_col) + 1
-    sheet.update_cell(sheet_row, status_col_idx, status)
-    sheet.update_cell(sheet_row, notes_col_idx, notes)
+    sheet.batch_update([
+        {"range": gspread.utils.rowcol_to_a1(sheet_row, status_col_idx), "values": [[status]]},
+        {"range": gspread.utils.rowcol_to_a1(sheet_row, notes_col_idx), "values": [[notes]]},
+    ])
 
 
 def render_detail(item, sheet, df, unique_key):
@@ -178,7 +181,7 @@ def render_detail(item, sheet, df, unique_key):
     save_key = "save_" + unique_key
     if st.button("Save", key=save_key):
         save_update(sheet, df, item["sheet_row"], item["status_col"], item["notes_col"], status, notes)
-        st.cache_resource.clear()
+        load_data.clear()
         st.success("Saved!")
         st.rerun()
 
