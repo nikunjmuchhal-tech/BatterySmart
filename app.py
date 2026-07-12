@@ -36,12 +36,12 @@ BRAND_NAVY = "#151272"
 LOGO_SVG = "<svg width='46' height='46' viewBox='0 0 300 470' style='vertical-align:middle; margin-right:12px;'><rect x='95' y='0' width='110' height='45' rx='8' fill='#00C389'/><path d='M20 65 C5 65 0 80 10 92 L140 240 L10 388 C0 400 5 415 20 415 L280 415 C295 415 300 400 290 388 L160 240 L290 92 C300 80 295 65 280 65 Z M100 130 L200 130 L150 190 Z M100 350 L200 350 L150 290 Z' fill='#00C389'/></svg>"
 
 METRIC_ICONS = {
-    "Total Due": "📋",
-    "Completed": "✅",
-    "Escalated": "🚨",
-    "Follow-up": "🔁",
-    "Pending": "⏳",
-    "Docs Received": "📄",
+    "Total Due": "▣",
+    "Completed": "✓",
+    "Escalated": "!",
+    "Follow-up": "↻",
+    "Pending": "◷",
+    "Docs Received": "✓",
 }
 
 # DOM lookup, derived from the USC-to-DOM assignment log provided.
@@ -73,11 +73,23 @@ def get_dom(usc_name):
     if not usc_name:
         return "Unassigned"
     full = str(usc_name).strip().lower()
+    full = " ".join(full.split())
     if full in DOM_MAP:
         return DOM_MAP[full]
-    first = full.split(" ")[0] if full else ""
-    if first in DOM_MAP:
-        return DOM_MAP[first]
+
+    words = full.split(" ")
+
+    # Check consecutive two-word combinations (handles "shail mishra", "mohd shadab", etc.)
+    for i in range(len(words) - 1):
+        pair = words[i] + " " + words[i + 1]
+        if pair in DOM_MAP:
+            return DOM_MAP[pair]
+
+    # Check each individual word (handles "Mohd Salman" -> "salman", "Sorabh Kumar" -> "sorabh")
+    for word in words:
+        if word in DOM_MAP:
+            return DOM_MAP[word]
+
     return "Unassigned"
 
 
@@ -522,7 +534,8 @@ def render_generic_tab(items, sheet, df, key_prefix, detail_fn):
 
 def render_metric(label, value):
     icon = METRIC_ICONS.get(label, "")
-    html = "<div class='metric-box'><div style='font-size:1.3rem;'>" + icon + "</div><div class='metric-num'>" + str(value) + "</div><div class='metric-label'>" + label + "</div></div>"
+    icon_html = "<div style='font-size:1.4rem; color:" + BRAND_GREEN + "; font-weight:800;'>" + icon + "</div>"
+    html = "<div class='metric-box'>" + icon_html + "<div class='metric-num'>" + str(value) + "</div><div class='metric-label'>" + label + "</div></div>"
     st.markdown(html, unsafe_allow_html=True)
 
 
