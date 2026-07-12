@@ -16,6 +16,7 @@ CALL_SHEET_TAB = "Call Logs"
 DOCS_SHEET_TAB = "Docs Tracker"
 
 CALL_SCRIPT = "Hello {name}, welcome to Battery Smart! This is a courtesy call to confirm you're settling in well. Any questions about onboarding, your plan, or the app?"
+CALL_2_SCRIPT = "Hello {name}, following up from Battery Smart — how has your experience been since you started? Any issues with the vehicle, battery, or swap process?"
 DOCS_SCRIPT = "Hello {name}, this is Battery Smart calling regarding your vehicle documents. Have you received your RC and other vehicle documents yet?"
 
 CALL_STATUS_OPTIONS = ["Pending", "Call Attempted", "Escalated to DOM", "Follow-up Needed"]
@@ -110,6 +111,9 @@ st.markdown(
     "<style>"
     "[data-testid='stAppViewContainer'] { background: linear-gradient(160deg, #f0fffa 0%, #ffffff 30%, #f1f2ff 100%); }"
     "[data-testid='stHeader'] { background: rgba(0,0,0,0); }"
+    "[data-testid='stSidebarNav'] { display: none !important; visibility: hidden !important; height: 0 !important; min-height: 0 !important; }"
+    "div[data-testid='stSidebarNavItems'] { display: none !important; }"
+    "nav[data-testid='stSidebarNav'] { display: none !important; }"
     "[data-testid='stSidebar'] { background: linear-gradient(180deg, " + BRAND_NAVY + " 0%, #23197a 100%); min-width: 300px !important; }"
     "[data-testid='stSidebar'] * { color: #ffffff !important; }"
     "[data-testid='stSidebar'] .block-container { padding-top: 2rem; }"
@@ -260,31 +264,59 @@ def build_call_due_list(df):
     today = today_ist()
     due = []
     for i, row in df.iterrows():
-        due_date = parse_date(row.get("Call_Due_Date"))
-        status = row.get("Call_Status", "Pending") or "Pending"
-        if due_date == today and status == "Pending":
-            item = {}
-            item["sheet_row"] = i + 2
-            item["driver_id"] = row.get("Driver_ID")
-            item["driver_name"] = row.get("Driver_Name")
-            item["contact_number"] = row.get("Contact_Number")
-            item["zone"] = row.get("Zone")
-            item["onboarding_date"] = row.get("Onboarding_Date")
-            item["dealership"] = row.get("Dealership")
-            item["vehicle_model"] = row.get("Vehicle_Model")
-            item["total_signup_amount"] = row.get("Total_Signup_Amount")
-            item["amount_paid"] = row.get("Amount_Paid")
-            item["plan_amount"] = row.get("Plan_Amount")
-            item["usc_id"] = row.get("USC_ID")
-            item["usc_name"] = row.get("USC_Name")
-            item["dom"] = get_dom(row.get("USC_Name"))
-            item["dfe_status"] = row.get("DFE_Fees_Asked", "Not Checked") or "Not Checked"
-            item["dfe_amount"] = row.get("DFE_Fee_Amount", "")
+        base = {}
+        base["sheet_row"] = i + 2
+        base["driver_id"] = row.get("Driver_ID")
+        base["driver_name"] = row.get("Driver_Name")
+        base["contact_number"] = row.get("Contact_Number")
+        base["zone"] = row.get("Zone")
+        base["onboarding_date"] = row.get("Onboarding_Date")
+        base["dealership"] = row.get("Dealership")
+        base["vehicle_model"] = row.get("Vehicle_Model")
+        base["total_signup_amount"] = row.get("Total_Signup_Amount")
+        base["amount_paid"] = row.get("Amount_Paid")
+        base["plan_amount"] = row.get("Plan_Amount")
+        base["usc_id"] = row.get("USC_ID")
+        base["usc_name"] = row.get("USC_Name")
+        base["dom"] = get_dom(row.get("USC_Name"))
+        base["dfe_status"] = row.get("DFE_Fees_Asked", "Not Checked") or "Not Checked"
+        base["dfe_amount"] = row.get("DFE_Fee_Amount", "")
+        base["call_result"] = row.get("Call_Outcome_Detail", "")
+
+        # Call 1 (D+1)
+        due_date_1 = parse_date(row.get("Call_Due_Date"))
+        status_1 = row.get("Call_Status", "Pending") or "Pending"
+        if due_date_1 == today and status_1 == "Pending":
+            item = dict(base)
+            item["call_num"] = 1
+            item["stage_label"] = "D+1"
+            item["status_col"] = "Call_Status"
+            item["notes_col"] = "Call_Notes"
+            item["due_col"] = "Call_Due_Date"
+            item["followup_flag_col"] = "Is_Followup"
             item["is_followup"] = str(row.get("Is_Followup", "")).strip().upper() in ("TRUE", "1", "YES")
             item["current_notes"] = row.get("Call_Notes", "")
-            item["call_result"] = row.get("Call_Outcome_Detail", "")
+            item["show_dfe"] = True
             item["script"] = CALL_SCRIPT.format(name=row.get("Driver_Name"))
             due.append(item)
+
+        # Call 2 (D+2)
+        due_date_2 = parse_date(row.get("Call_2_Due_Date"))
+        status_2 = row.get("Call_2_Status", "Pending") or "Pending"
+        if due_date_2 == today and status_2 == "Pending":
+            item = dict(base)
+            item["call_num"] = 2
+            item["stage_label"] = "D+2"
+            item["status_col"] = "Call_2_Status"
+            item["notes_col"] = "Call_2_Notes"
+            item["due_col"] = "Call_2_Due_Date"
+            item["followup_flag_col"] = "Is_Followup_2"
+            item["is_followup"] = str(row.get("Is_Followup_2", "")).strip().upper() in ("TRUE", "1", "YES")
+            item["current_notes"] = row.get("Call_2_Notes", "")
+            item["show_dfe"] = False
+            item["script"] = CALL_2_SCRIPT.format(name=row.get("Driver_Name"))
+            due.append(item)
+
     return due
 
 
@@ -292,15 +324,25 @@ def build_call_today_all(df):
     today = today_ist()
     rows = []
     for i, row in df.iterrows():
-        due_date = parse_date(row.get("Call_Due_Date"))
-        if due_date == today:
+        due_date_1 = parse_date(row.get("Call_Due_Date"))
+        if due_date_1 == today:
             rows.append({
                 "driver_id": row.get("Driver_ID"),
-                "driver_name": row.get("Driver_Name"),
+                "driver_name": row.get("Driver_Name") + " [D+1]",
                 "contact_number": row.get("Contact_Number"),
                 "usc_name": row.get("USC_Name"),
                 "dom": get_dom(row.get("USC_Name")),
                 "status": row.get("Call_Status", "Pending") or "Pending",
+            })
+        due_date_2 = parse_date(row.get("Call_2_Due_Date"))
+        if due_date_2 == today:
+            rows.append({
+                "driver_id": row.get("Driver_ID"),
+                "driver_name": row.get("Driver_Name") + " [D+2]",
+                "contact_number": row.get("Contact_Number"),
+                "usc_name": row.get("USC_Name"),
+                "dom": get_dom(row.get("USC_Name")),
+                "status": row.get("Call_2_Status", "Pending") or "Pending",
             })
     return rows
 
@@ -397,7 +439,7 @@ def save_updates(sheet, df, sheet_row, updates):
 def render_call_detail(item, sheet, df, unique_key):
     detail_box = st.container(border=True)
     with detail_box:
-        name_html = "<div class='detail-name'>" + str(item['driver_name']) + "</div><div class='detail-sub'>Driver ID: " + str(item['driver_id']) + " &nbsp;|&nbsp; USC: " + fmt_val(item['usc_name']) + " &nbsp;|&nbsp; DOM: " + item['dom'] + "</div>"
+        name_html = "<div class='detail-name'>" + str(item['driver_name']) + "</div><div class='detail-sub'>Driver ID: " + str(item['driver_id']) + " &nbsp;|&nbsp; USC: " + fmt_val(item['usc_name']) + " &nbsp;|&nbsp; DOM: " + item['dom'] + " &nbsp;|&nbsp; Stage: <b>" + item["stage_label"] + "</b></div>"
         st.markdown(name_html, unsafe_allow_html=True)
 
         tel_number = str(item['contact_number']).strip()
@@ -441,32 +483,36 @@ def render_call_detail(item, sheet, df, unique_key):
     notes_key = "notes_" + unique_key
     notes = st.text_input("Call notes", value=item["current_notes"], key=notes_key)
 
-    dfe_key = "dfe_" + unique_key
-    dfe_default_idx = 0
-    if item["dfe_status"] in DFE_OPTIONS:
-        dfe_default_idx = DFE_OPTIONS.index(item["dfe_status"])
-    dfe_col1, dfe_col2 = st.columns(2)
-    with dfe_col1:
-        dfe_value = st.selectbox("DFE/dealer asked for fees?", DFE_OPTIONS, index=dfe_default_idx, key=dfe_key)
+    dfe_value = None
     dfe_amount_value = ""
-    if dfe_value == "Yes":
-        with dfe_col2:
-            existing_amount = str(item["dfe_amount"]) if item["dfe_amount"] else ""
-            dfe_amount_value = st.text_input("Fee amount asked (Rs)", value=existing_amount, key="dfeamt_" + unique_key)
+    if item["show_dfe"]:
+        dfe_key = "dfe_" + unique_key
+        dfe_default_idx = 0
+        if item["dfe_status"] in DFE_OPTIONS:
+            dfe_default_idx = DFE_OPTIONS.index(item["dfe_status"])
+        dfe_col1, dfe_col2 = st.columns(2)
+        with dfe_col1:
+            dfe_value = st.selectbox("DFE/dealer asked for fees?", DFE_OPTIONS, index=dfe_default_idx, key=dfe_key)
+        if dfe_value == "Yes":
+            with dfe_col2:
+                existing_amount = str(item["dfe_amount"]) if item["dfe_amount"] else ""
+                dfe_amount_value = st.text_input("Fee amount asked (Rs)", value=existing_amount, key="dfeamt_" + unique_key)
 
     st.write("")
     btn1, btn2, btn3 = st.columns(3)
 
-    base_updates = {"Call_Notes": notes, "DFE_Fees_Asked": dfe_value, "Call_Outcome_Detail": call_result}
-    if dfe_value == "Yes":
-        base_updates["DFE_Fee_Amount"] = dfe_amount_value
-    else:
-        base_updates["DFE_Fee_Amount"] = ""
+    base_updates = {item["notes_col"]: notes, "Call_Outcome_Detail": call_result}
+    if dfe_value is not None:
+        base_updates["DFE_Fees_Asked"] = dfe_value
+        if dfe_value == "Yes":
+            base_updates["DFE_Fee_Amount"] = dfe_amount_value
+        else:
+            base_updates["DFE_Fee_Amount"] = ""
 
     with btn1:
         if st.button("✅ Call Attempted", key="complete_" + unique_key, type="primary", use_container_width=True):
             updates = dict(base_updates)
-            updates["Call_Status"] = "Call Attempted"
+            updates[item["status_col"]] = "Call Attempted"
             updates["Escalation_Status"] = ""
             save_updates(sheet, df, item["sheet_row"], updates)
             load_call_data.clear()
@@ -479,11 +525,11 @@ def render_call_detail(item, sheet, df, unique_key):
                 st.warning("Please add call notes describing the issue before escalating.")
             else:
                 updates = dict(base_updates)
-                updates["Call_Status"] = "Escalated to DOM"
+                updates[item["status_col"]] = "Escalated to DOM"
                 updates["Escalation_Status"] = "Open"
                 save_updates(sheet, df, item["sheet_row"], updates)
                 load_call_data.clear()
-                msg = "🚨 *Case Escalated* — Onboarding Call\nDriver: " + str(item["driver_name"]) + " (" + str(item["driver_id"]) + ")\nContact: " + str(item["contact_number"]) + "\nUSC: " + fmt_val(item["usc_name"]) + "\nDOM: " + item["dom"] + "\nIssue: " + notes
+                msg = "🚨 *Case Escalated* — Onboarding Call (" + item["stage_label"] + ")\nDriver: " + str(item["driver_name"]) + " (" + str(item["driver_id"]) + ")\nContact: " + str(item["contact_number"]) + "\nUSC: " + fmt_val(item["usc_name"]) + "\nDOM: " + item["dom"] + "\nIssue: " + notes
                 sent, err = send_slack_alert(msg)
                 st.session_state["last_slack_result"] = (sent, err, item["driver_name"])
                 st.rerun()
@@ -492,15 +538,15 @@ def render_call_detail(item, sheet, df, unique_key):
         if st.button("🔁 Follow-up Tomorrow", key="followup_" + unique_key, use_container_width=True):
             updates = dict(base_updates)
             tomorrow = today_ist() + timedelta(days=1)
-            updates["Call_Due_Date"] = tomorrow.strftime("%d/%m/%Y")
-            updates["Call_Status"] = "Pending"
-            updates["Is_Followup"] = True
+            updates[item["due_col"]] = tomorrow.strftime("%d/%m/%Y")
+            updates[item["status_col"]] = "Pending"
+            updates[item["followup_flag_col"]] = True
             save_updates(sheet, df, item["sheet_row"], updates)
             load_call_data.clear()
             st.toast("Scheduled for tomorrow!", icon="🔁")
             st.rerun()
         if item["is_followup"]:
-            st.caption("This driver has already had at least one follow-up before.")
+            st.caption("This driver has already had at least one follow-up before, on this stage.")
 
 
 def render_docs_detail(item, sheet, df, unique_key):
@@ -593,14 +639,16 @@ def render_generic_tab(items, sheet, df, key_prefix, detail_fn):
     list_col, detail_col = st.columns([1, 2])
     with list_col:
         for idx, item in enumerate(filtered):
-            label = item["driver_name"] + "  (" + str(item["driver_id"]) + ")"
+            stage_tag = (" [" + item["stage_label"] + "]") if "stage_label" in item else ""
+            label = item["driver_name"] + stage_tag + "  (" + str(item["driver_id"]) + ")"
             btn_type = "primary" if idx == st.session_state[selected_key] else "secondary"
-            if st.button(label, key=key_prefix + "_btn_" + str(item["sheet_row"]), use_container_width=True, type=btn_type):
+            row_key = key_prefix + "_btn_" + str(item["sheet_row"]) + "_" + str(item.get("call_num", 0))
+            if st.button(label, key=row_key, use_container_width=True, type=btn_type):
                 st.session_state[selected_key] = idx
 
     with detail_col:
         item = filtered[st.session_state[selected_key]]
-        unique_key = key_prefix + "_" + str(item["sheet_row"])
+        unique_key = key_prefix + "_" + str(item["sheet_row"]) + "_" + str(item.get("call_num", 0))
         detail_fn(item, sheet, df, unique_key)
 
 
