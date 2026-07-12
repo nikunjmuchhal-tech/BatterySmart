@@ -68,6 +68,11 @@ DOM_MAP = {
     "aarif": "Sajid",
 }
 
+DOM_SLACK_ID = {
+    "Aman": "U09EHLRG3J7",
+    "Sajid": "U0AMA1TAJ2Y",
+}
+
 CALL_RESULT_OPTIONS = ["Connected", "Not Connected", "Incoming Not Available", "FollowUp Scheduled"]
 
 
@@ -196,23 +201,6 @@ st.markdown(
     "</style>",
     unsafe_allow_html=True,
 )
-
-
-def check_password():
-    def password_entered():
-        if st.session_state["password"] == st.secrets["app_password"]:
-            st.session_state["authenticated"] = True
-            del st.session_state["password"]
-        else:
-            st.session_state["authenticated"] = False
-
-    if st.session_state.get("authenticated"):
-        return True
-
-    st.text_input("Password", type="password", on_change=password_entered, key="password")
-    if "authenticated" in st.session_state and not st.session_state["authenticated"]:
-        st.error("Incorrect password")
-    return False
 
 
 @st.cache_resource
@@ -537,7 +525,9 @@ def render_call_detail(item, sheet, df, unique_key):
                 updates["Escalation_Status"] = "Open"
                 save_updates(sheet, df, item["sheet_row"], updates)
                 load_call_data.clear()
-                msg = "🚨 *Case Escalated* — Onboarding Call (" + item["stage_label"] + ")\nDriver: " + str(item["driver_name"]) + " (" + str(item["driver_id"]) + ")\nContact: " + str(item["contact_number"]) + "\nUSC: " + fmt_val(item["usc_name"]) + "\nDOM: " + item["dom"] + "\nIssue: " + notes
+                dom_id = DOM_SLACK_ID.get(item["dom"])
+                dom_mention = ("<@" + dom_id + "> ") if dom_id else ""
+                msg = dom_mention + "🚨 *Case Escalated* — Onboarding Call (" + item["stage_label"] + ")\nDriver: " + str(item["driver_name"]) + " (" + str(item["driver_id"]) + ")\nContact: " + str(item["contact_number"]) + "\nUSC: " + fmt_val(item["usc_name"]) + "\nDOM: " + item["dom"] + "\nIssue: " + notes
                 sent, err = send_slack_alert(msg)
                 st.session_state["last_slack_result"] = (sent, err, item["driver_name"])
                 st.rerun()
@@ -615,7 +605,9 @@ def render_docs_detail(item, sheet, df, unique_key):
                 updates = {"Docs_Notes": notes, "Docs_Status": "Escalated to DOM", "Escalation_Status": "Open"}
                 save_updates(sheet, df, item["sheet_row"], updates)
                 load_docs_data.clear()
-                msg = "🚨 *Case Escalated* — Documentation\nDriver: " + str(item["driver_name"]) + " (" + str(item["driver_id"]) + ")\nContact: " + str(item["contact_number"]) + "\nUSC: " + fmt_val(item["usc_name"]) + "\nDOM: " + item["dom"] + "\nIssue: " + notes
+                dom_id = DOM_SLACK_ID.get(item["dom"])
+                dom_mention = ("<@" + dom_id + "> ") if dom_id else ""
+                msg = dom_mention + "🚨 *Case Escalated* — Documentation\nDriver: " + str(item["driver_name"]) + " (" + str(item["driver_id"]) + ")\nContact: " + str(item["contact_number"]) + "\nUSC: " + fmt_val(item["usc_name"]) + "\nDOM: " + item["dom"] + "\nIssue: " + notes
                 sent, err = send_slack_alert(msg)
                 st.session_state["last_slack_result"] = (sent, err, item["driver_name"])
                 st.rerun()
@@ -771,9 +763,6 @@ def main():
     title_html = "<h1>" + LOGO_SVG + "Battery Smart</h1>"
     st.markdown(title_html, unsafe_allow_html=True)
     st.caption("Onboarding Call Tracker & Documentation Tracker")
-
-    if not check_password():
-        return
 
     if "last_slack_result" in st.session_state:
         sent, err, driver_name = st.session_state.pop("last_slack_result")
