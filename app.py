@@ -26,17 +26,7 @@ STATUS_COLOR = {
     "FollowUp Scheduled": "#2563eb",
 }
 
-st.markdown("""
-<style>
-h1 { font-size: 2.4rem !important; }
-.stTabs [data-baseweb="tab"] { font-size: 1.2rem !important; padding: 10px 18px !important; }
-.stTabs [data-baseweb="tab-list"] { gap: 8px; }
-div[data-testid="stMarkdownContainer"] p { font-size: 1.05rem; }
-.detail-name { font-size: 1.6rem; font-weight: 700; margin-bottom: 4px; }
-.detail-label { font-size: 0.85rem; color: #888; text-transform: uppercase; letter-spacing: 0.5px; }
-.detail-value { font-size: 1.15rem; margin-bottom: 10px; }
-</style>
-""", unsafe_allow_html=True)
+st.markdown("<style>h1 { font-size: 2.4rem !important; } .stTabs [data-baseweb='tab'] { font-size: 1.2rem !important; padding: 10px 18px !important; } .stTabs [data-baseweb='tab-list'] { gap: 8px; } div[data-testid='stMarkdownContainer'] p { font-size: 1.05rem; } .detail-name { font-size: 1.6rem; font-weight: 700; margin-bottom: 4px; } .detail-label { font-size: 0.85rem; color: #888; text-transform: uppercase; letter-spacing: 0.5px; } .detail-value { font-size: 1.15rem; margin-bottom: 10px; }</style>", unsafe_allow_html=True)
 
 
 def check_password():
@@ -138,21 +128,119 @@ def save_update(sheet, df, sheet_row, status_col, notes_col, status, notes):
 
 
 def render_detail(item, sheet, df, unique_key):
-    st.markdown("<div class='detail-name'>" + str(item['driver_name']) + "</div>", unsafe_allow_html=True)
-    st.markdown("<div class='detail-label'>Driver ID</div><div class='detail-value'>" + str(item['driver_id']) + "</div>", unsafe_allow_html=True)
+    name_html = "<div class='detail-name'>" + str(item['driver_name']) + "</div>"
+    st.markdown(name_html, unsafe_allow_html=True)
+
+    id_html = "<div class='detail-label'>Driver ID</div><div class='detail-value'>" + str(item['driver_id']) + "</div>"
+    st.markdown(id_html, unsafe_allow_html=True)
 
     c1, c2 = st.columns(2)
     with c1:
-        st.markdown("<div class='detail-label'>Contact Number</div><div class='detail-value'>" + str(item['contact_number']) + "</div>", unsafe_allow_html=True)
-        st.markdown("<div class='detail-label'>Zone</div><div class='detail-value'>" + str(item['zone']) + "</div>", unsafe_allow_html=True)
-        st.markdown("<div class='detail-label'>Onboarding Date</div><div class='detail-value'>" + str(item['onboarding_date']) + "</div>", unsafe_allow_html=True)
-        st.markdown("<div class='detail-label'>Dealership</div><div class='detail-value'>" + str(item['dealership']) + "</div>", unsafe_allow_html=True)
-    with c2:
-        st.markdown("<div class='detail-label'>Vehicle</div><div class='detail-value'>" + str(item['vehicle_model']) + "</div>", unsafe_allow_html=True)
-        st.markdown("<div class='detail-label'>Vehicle Price / Amount Paid</div><div class='detail-value'>Rs " + str(item['total_signup_amount']) + " / Rs " + str(item['amount_paid']) + "</div>", unsafe_allow_html=True)
-        st.markdown("<div class='detail-label'>Plan Amount (EMI/Subscription)</div><div class='detail-value'>Rs " + str(item['plan_amount']) + "</div>", unsafe_allow_html=True)
+        contact_html = "<div class='detail-label'>Contact Number</div><div class='detail-value'>" + str(item['contact_number']) + "</div>"
+        st.markdown(contact_html, unsafe_allow_html=True)
 
-    st.info("**Script:** " + item["script"])
+        zone_html = "<div class='detail-label'>Zone</div><div class='detail-value'>" + str(item['zone']) + "</div>"
+        st.markdown(zone_html, unsafe_allow_html=True)
+
+        onboard_html = "<div class='detail-label'>Onboarding Date</div><div class='detail-value'>" + str(item['onboarding_date']) + "</div>"
+        st.markdown(onboard_html, unsafe_allow_html=True)
+
+        dealer_html = "<div class='detail-label'>Dealership</div><div class='detail-value'>" + str(item['dealership']) + "</div>"
+        st.markdown(dealer_html, unsafe_allow_html=True)
+
+    with c2:
+        vehicle_html = "<div class='detail-label'>Vehicle</div><div class='detail-value'>" + str(item['vehicle_model']) + "</div>"
+        st.markdown(vehicle_html, unsafe_allow_html=True)
+
+        price_html = "<div class='detail-label'>Vehicle Price / Amount Paid</div><div class='detail-value'>Rs " + str(item['total_signup_amount']) + " / Rs " + str(item['amount_paid']) + "</div>"
+        st.markdown(price_html, unsafe_allow_html=True)
+
+        plan_html = "<div class='detail-label'>Plan Amount (EMI/Subscription)</div><div class='detail-value'>Rs " + str(item['plan_amount']) + "</div>"
+        st.markdown(plan_html, unsafe_allow_html=True)
+
+    script_text = "**Script:** " + item["script"]
+    st.info(script_text)
 
     if item["current_notes"]:
-        st.caption("Previous notes: " +
+        notes_caption = "Previous notes: " + str(item["current_notes"])
+        st.caption(notes_caption)
+
+    status_key = "status_" + unique_key
+    notes_key = "notes_" + unique_key
+
+    default_idx = 0
+    if item["current_status"] in STATUS_OPTIONS:
+        default_idx = STATUS_OPTIONS.index(item["current_status"])
+
+    status = st.selectbox("Outcome", STATUS_OPTIONS, index=default_idx, key=status_key)
+    notes = st.text_input("Call notes", value=item["current_notes"], key=notes_key)
+
+    save_key = "save_" + unique_key
+    if st.button("Save", key=save_key):
+        save_update(sheet, df, item["sheet_row"], item["status_col"], item["notes_col"], status, notes)
+        st.cache_resource.clear()
+        st.success("Saved!")
+        st.rerun()
+
+
+def render_tab(items, sheet, df, key_prefix):
+    if not items:
+        st.success("No calls due right now.")
+        return
+
+    param_name = key_prefix + "_sel"
+    selected_idx = 0
+    if param_name in st.query_params:
+        try:
+            selected_idx = int(st.query_params[param_name])
+        except Exception:
+            selected_idx = 0
+    if selected_idx >= len(items):
+        selected_idx = 0
+
+    list_col, detail_col = st.columns([1, 2])
+
+    with list_col:
+        links_html = ""
+        for idx, item in enumerate(items):
+            color = STATUS_COLOR.get(item["current_status"], "#6b7280")
+            is_selected = (idx == selected_idx)
+            if is_selected:
+                border = "3px solid white"
+            else:
+                border = "3px solid transparent"
+            label = item["driver_name"] + " (" + str(item["driver_id"]) + ")"
+            link = "<a href='?" + param_name + "=" + str(idx) + "' target='_self' style='display:block;background:" + color + ";color:white;padding:12px 14px;border-radius:8px;margin-bottom:8px;text-decoration:none;font-weight:600;font-size:1.05rem;border:" + border + ";'>" + label + "</a>"
+            links_html = links_html + link
+        st.markdown(links_html, unsafe_allow_html=True)
+
+    with detail_col:
+        item = items[selected_idx]
+        unique_key = key_prefix + "_" + str(item["sheet_row"])
+        render_detail(item, sheet, df, unique_key)
+
+
+def main():
+    st.title("📞 Battery Smart — Onboarding Calls")
+    st.caption("Financed (L5) drivers — D+1 / D+2 welcome calls")
+
+    if not check_password():
+        return
+
+    sheet = get_sheet()
+    df = load_data(sheet)
+    d1_list, d2_list = build_lists(df)
+
+    tab1_label = "🟢 D+1 Calls (" + str(len(d1_list)) + ")"
+    tab2_label = "🟠 D+2 Calls (" + str(len(d2_list)) + ")"
+    tab1, tab2 = st.tabs([tab1_label, tab2_label])
+
+    with tab1:
+        render_tab(d1_list, sheet, df, "d1")
+
+    with tab2:
+        render_tab(d2_list, sheet, df, "d2")
+
+
+if __name__ == "__main__":
+    main()
