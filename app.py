@@ -254,7 +254,7 @@ def render_detail(item, sheet, df, unique_key):
     with col_a:
         status = st.selectbox("Outcome", STATUS_OPTIONS, index=default_idx, key=status_key)
     with col_b:
-        notes = st.text_input("Call notes (optional)", value=item["current_notes"], key=notes_key)
+        notes = st.text_input("Call notes", value=item["current_notes"], key=notes_key)
 
     dfe_value = None
     dfe_amount_value = ""
@@ -266,7 +266,7 @@ def render_detail(item, sheet, df, unique_key):
 
         col_c, col_d = st.columns(2)
         with col_c:
-            dfe_value = st.selectbox("DFE/dealer asked for fees? (optional)", DFE_OPTIONS, index=dfe_default_idx, key=dfe_key)
+            dfe_value = st.selectbox("DFE/dealer asked for fees?", DFE_OPTIONS, index=dfe_default_idx, key=dfe_key)
         if dfe_value == "Yes":
             with col_d:
                 dfe_amount_key = "dfeamt_" + unique_key
