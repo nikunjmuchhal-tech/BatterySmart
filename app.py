@@ -226,7 +226,8 @@ def render_tab(items, sheet, df, key_prefix):
 def main():
     st.title("📞 Battery Smart — Onboarding Calls")
     st.caption("Financed (L5) drivers — D+1 / D+2 welcome calls")
-    st.page_link("pages/Dashboard.py", label="📊 Open Manager Dashboard", icon="📊")
+    st.markdown('<a href="/Dashboard" target="_self" style="display:inline-block;background:#2563eb;color:white;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:600;">📊 Open Manager Dashboard</a>', unsafe_allow_html=True)
+    st.write("")
 
     if not check_password():
         return
