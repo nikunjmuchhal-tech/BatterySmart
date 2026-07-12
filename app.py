@@ -191,15 +191,27 @@ def render_detail(item, sheet, df, unique_key):
 
     save_key = "save_" + unique_key
     if st.button("Save", key=save_key):
-        updates = {}
-        updates[item["status_col"]] = status
-        updates[item["notes_col"]] = notes
-        if dfe_value is not None:
-            updates["DFE_Fees_Asked"] = dfe_value
-        save_call(sheet, df, item["sheet_row"], updates)
-        load_data.clear()
-        st.success("Saved!")
-        st.rerun()
+        errors = []
+        if status == "Pending":
+            errors.append("Please select an actual call Outcome (not Pending).")
+        if not notes or not notes.strip():
+            errors.append("Please enter Call notes before saving.")
+        if item["stage"] == "D+1" and dfe_value == "Not Checked":
+            errors.append("Please answer the DFE fees question before saving.")
+
+        if errors:
+            for e in errors:
+                st.warning(e)
+        else:
+            updates = {}
+            updates[item["status_col"]] = status
+            updates[item["notes_col"]] = notes
+            if dfe_value is not None:
+                updates["DFE_Fees_Asked"] = dfe_value
+            save_call(sheet, df, item["sheet_row"], updates)
+            load_data.clear()
+            st.success("Saved!")
+            st.rerun()
 
 
 def render_tab(items, sheet, df, key_prefix):
