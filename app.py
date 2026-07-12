@@ -114,14 +114,21 @@ st.markdown(
     "[data-testid='stSidebarNav'] { display: none !important; visibility: hidden !important; height: 0 !important; min-height: 0 !important; }"
     "div[data-testid='stSidebarNavItems'] { display: none !important; }"
     "nav[data-testid='stSidebarNav'] { display: none !important; }"
-    "[data-testid='stSidebar'] { background: linear-gradient(180deg, " + BRAND_NAVY + " 0%, #23197a 100%); min-width: 300px !important; }"
+    "[data-testid='stSidebar'] { background: linear-gradient(180deg, " + BRAND_NAVY + " 0%, #23197a 100%); min-width: 310px !important; box-shadow: 4px 0 20px rgba(0,0,0,0.15); }"
     "[data-testid='stSidebar'] * { color: #ffffff !important; }"
-    "[data-testid='stSidebar'] .block-container { padding-top: 2rem; }"
-    "[data-testid='stSidebar'] .stRadio label { font-size: 1.1rem !important; font-weight: 600; padding: 6px 0; }"
-    "[data-testid='stSidebar'] .stRadio div[role='radiogroup'] { gap: 10px; }"
-    "[data-testid='stSidebar'] div[data-testid='stMarkdownContainer'] p { font-size: 1.05rem !important; }"
-    "[data-testid='stSidebar'] hr { border-color: rgba(255,255,255,0.15); margin: 18px 0; }"
-    "[data-testid='stSidebar'] div.stButton > button { font-size: 1.0rem !important; padding: 10px 0 !important; }"
+    "[data-testid='stSidebar'] .block-container { padding-top: 2.2rem; padding-left: 1.4rem; padding-right: 1.4rem; }"
+    "[data-testid='stSidebar'] .stRadio { background: rgba(255,255,255,0.05); border-radius: 16px; padding: 10px; }"
+    "[data-testid='stSidebar'] .stRadio div[role='radiogroup'] { gap: 4px; }"
+    "[data-testid='stSidebar'] .stRadio label { font-size: 1.02rem !important; font-weight: 600; padding: 12px 14px !important; border-radius: 12px; width: 100%; transition: background 0.15s ease; }"
+    "[data-testid='stSidebar'] .stRadio label:hover { background: rgba(255,255,255,0.08); }"
+    "[data-testid='stSidebar'] .stRadio label[data-checked='true'] { background: " + BRAND_GREEN + " !important; }"
+    "[data-testid='stSidebar'] .stRadio label[data-checked='true'] p { color: " + BRAND_NAVY + " !important; font-weight: 800 !important; }"
+    "[data-testid='stSidebar'] .stRadio input:checked + div { background: " + BRAND_GREEN + " !important; }"
+    "[data-testid='stSidebar'] div[data-testid='stMarkdownContainer'] p { font-size: 1.02rem !important; }"
+    "[data-testid='stSidebar'] hr { border: none; border-top: 1px solid rgba(255,255,255,0.12); margin: 22px 0; }"
+    "[data-testid='stSidebar'] div.stButton > button { font-size: 0.98rem !important; padding: 11px 0 !important; background: rgba(255,255,255,0.08) !important; border: 1px solid rgba(255,255,255,0.15) !important; }"
+    "[data-testid='stSidebar'] div.stButton > button:hover { background: rgba(255,255,255,0.16) !important; border-color: " + BRAND_GREEN + " !important; }"
+    ".sidebar-brand-box { padding: 4px 4px 20px 4px; }"
     ".sidebar-stat-box { background: rgba(255,255,255,0.08); border-radius: 12px; padding: 14px 16px; margin-bottom: 10px; }"
     ".sidebar-stat-num { font-size: 1.6rem; font-weight: 800; color: " + BRAND_GREEN + " !important; }"
     ".sidebar-stat-label { font-size: 0.85rem; color: #d7d5ff !important; text-transform: uppercase; letter-spacing: 0.4px; }"
@@ -784,7 +791,7 @@ def main():
     escalations = build_escalations(call_df, docs_df)
 
     with st.sidebar:
-        sidebar_logo_html = "<div style='display:flex;align-items:center;gap:8px;'>" + LOGO_SVG + "<span style='font-weight:700;font-size:1.1rem;'>Battery Smart</span></div>"
+        sidebar_logo_html = "<div class='sidebar-brand-box' style='display:flex;align-items:center;gap:10px;'>" + LOGO_SVG + "<span style='font-weight:800;font-size:1.25rem;letter-spacing:0.2px;'>Battery Smart</span></div>"
         st.markdown(sidebar_logo_html, unsafe_allow_html=True)
         view = st.radio("View", ["📞 Onboarding Call Tracker", "📄 Documentation Tracker", "🚨 Escalations", "📊 Dashboard"], label_visibility="collapsed")
         st.divider()
