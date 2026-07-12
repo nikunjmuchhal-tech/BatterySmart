@@ -27,6 +27,14 @@ STATUS_DOT = {
     "FollowUp Scheduled": "🔵",
 }
 
+STATUS_COLOR = {
+    "Pending": "#9ca3af",
+    "Connected": "#16a34a",
+    "Not Connected": "#eab308",
+    "Incoming Not Available": "#dc2626",
+    "FollowUp Scheduled": "#2563eb",
+}
+
 BRAND_GREEN = "#00C389"
 BRAND_NAVY = "#151272"
 
@@ -34,14 +42,24 @@ st.markdown(
     "<style>"
     "[data-testid='stAppViewContainer'] { background: linear-gradient(160deg, #f0fffa 0%, #ffffff 30%, #f1f2ff 100%); }"
     "[data-testid='stHeader'] { background: rgba(0,0,0,0); }"
-    "[data-testid='stSidebar'] { background: linear-gradient(180deg, " + BRAND_NAVY + " 0%, #23197a 100%); }"
+    "[data-testid='stSidebar'] { background: linear-gradient(180deg, " + BRAND_NAVY + " 0%, #23197a 100%); min-width: 300px !important; }"
     "[data-testid='stSidebar'] * { color: #ffffff !important; }"
-    "[data-testid='stSidebar'] .stRadio label { font-size: 1.05rem !important; }"
+    "[data-testid='stSidebar'] .block-container { padding-top: 2rem; }"
+    "[data-testid='stSidebar'] .stRadio label { font-size: 1.15rem !important; font-weight: 600; padding: 6px 0; }"
+    "[data-testid='stSidebar'] .stRadio div[role='radiogroup'] { gap: 10px; }"
+    "[data-testid='stSidebar'] div[data-testid='stMarkdownContainer'] p { font-size: 1.05rem !important; }"
+    "[data-testid='stSidebar'] div[data-testid='stCaptionContainer'] p { font-size: 1.1rem !important; color: #d7d5ff !important; font-weight: 500; }"
+    "[data-testid='stSidebar'] hr { border-color: rgba(255,255,255,0.15); margin: 18px 0; }"
+    "[data-testid='stSidebar'] div.stButton > button { font-size: 1.05rem !important; padding: 10px 0 !important; }"
+    ".sidebar-stat-box { background: rgba(255,255,255,0.08); border-radius: 12px; padding: 14px 16px; margin-bottom: 10px; }"
+    ".sidebar-stat-num { font-size: 1.6rem; font-weight: 800; color: " + BRAND_GREEN + "; }"
+    ".sidebar-stat-label { font-size: 0.85rem; color: #d7d5ff; text-transform: uppercase; letter-spacing: 0.4px; }"
     "h1 { font-size: 2.1rem !important; color:" + BRAND_NAVY + " !important; font-weight: 800 !important; }"
     ".stTabs [data-baseweb='tab'] { font-size: 1.05rem !important; padding: 8px 16px !important; }"
     ".stTabs [data-baseweb='tab-list'] { gap: 6px; }"
     ".stTabs [aria-selected='true'] { color: " + BRAND_GREEN + " !important; }"
     "div[data-testid='stMarkdownContainer'] p { font-size: 1.0rem; }"
+    ".detail-card { background: white; border-radius: 16px; padding: 20px 24px; box-shadow: 0 2px 12px rgba(21,18,114,0.08); border: 1px solid #eef0ff; }"
     ".detail-name { font-size: 1.4rem; font-weight: 700; margin-bottom: 2px; color:" + BRAND_NAVY + "; }"
     ".detail-sub { font-size: 0.9rem; color: #6b7280; margin-bottom: 12px; }"
     ".detail-label { font-size: 0.72rem; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.5px; }"
@@ -363,7 +381,7 @@ def render_dashboard_stage(items):
         })
         chart_df = chart_df[chart_df["Count"] > 0]
         if not chart_df.empty:
-            st.bar_chart(chart_df.set_index("Status"))
+            st.bar_chart(chart_df.set_index("Status"), color=BRAND_GREEN if False else None)
         else:
             st.caption("No data to chart yet.")
 
@@ -376,7 +394,7 @@ def render_dashboard_stage(items):
             "USC ID": str(g["usc_id"]),
             "Status": g["current_status"],
         }
-        if "dfe_status" in g:
+        if g.get("stage") == "D+1":
             row["DFE Asked"] = g["dfe_status"]
             row["Fee Amount"] = str(g["dfe_amount"]) if g["dfe_amount"] else ""
         all_rows.append(row)
@@ -417,8 +435,13 @@ def main():
         st.markdown(sidebar_logo_html, unsafe_allow_html=True)
         view = st.radio("View", ["📞 Calling Sheet", "📊 Manager Dashboard"], label_visibility="collapsed")
         st.divider()
-        st.caption("D+1 due today: " + str(len(d1_list)))
-        st.caption("D+2 due today: " + str(len(d2_list)))
+
+        d1_stat_html = "<div class='sidebar-stat-box'><div class='sidebar-stat-num'>" + str(len(d1_list)) + "</div><div class='sidebar-stat-label'>D+1 Due Today</div></div>"
+        st.markdown(d1_stat_html, unsafe_allow_html=True)
+
+        d2_stat_html = "<div class='sidebar-stat-box'><div class='sidebar-stat-num'>" + str(len(d2_list)) + "</div><div class='sidebar-stat-label'>D+2 Due Today</div></div>"
+        st.markdown(d2_stat_html, unsafe_allow_html=True)
+
         st.divider()
         if st.button("🔄 Refresh Data", use_container_width=True):
             load_data.clear()
