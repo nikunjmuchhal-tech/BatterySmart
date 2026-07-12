@@ -97,6 +97,7 @@ def build_lists(df):
         base["amount_paid"] = row.get("Amount_Paid")
         base["plan_amount"] = row.get("Plan_Amount")
         base["dfe_status"] = dfe_status
+        base["usc_id"] = row.get("USC_ID")
 
         if d1_date == today:
             item = dict(base)
@@ -163,6 +164,9 @@ def render_detail(item, sheet, df, unique_key):
 
         plan_html = "<div class='detail-label'>Plan Amount (EMI/Subscription)</div><div class='detail-value'>Rs " + str(item['plan_amount']) + "</div>"
         st.markdown(plan_html, unsafe_allow_html=True)
+
+    usc_html = "<div class='detail-label'>USC ID (Onboarding Agent)</div><div class='detail-value'>" + str(item['usc_id']) + "</div>"
+    st.markdown(usc_html, unsafe_allow_html=True)
 
     script_text = "**Script:** " + item["script"]
     st.info(script_text)
@@ -256,6 +260,18 @@ def render_metric(label, value):
     st.markdown(html, unsafe_allow_html=True)
 
 
+def group_to_table(group):
+    rows = []
+    for g in group:
+        rows.append({
+            "Driver Name": g["driver_name"],
+            "Driver ID": g["driver_id"],
+            "Contact Number": g["contact_number"],
+            "USC ID": g["usc_id"],
+        })
+    return pd.DataFrame(rows)
+
+
 def render_dashboard_stage(stage_name, items):
     st.subheader(stage_name)
 
@@ -303,8 +319,7 @@ def render_dashboard_stage(stage_name, items):
             if not group:
                 st.caption("Nobody in this category.")
             else:
-                for g in group:
-                    st.write(g["driver_name"] + " (" + str(g["driver_id"]) + ") — " + str(g["contact_number"]))
+                st.dataframe(group_to_table(group), use_container_width=True, hide_index=True)
 
     if stage_name == "D+1 Calls":
         st.markdown("**DFE Fees Asked Breakdown**")
@@ -332,8 +347,7 @@ def render_dashboard_stage(stage_name, items):
                 if not group:
                     st.caption("Nobody in this category.")
                 else:
-                    for g in group:
-                        st.write(g["driver_name"] + " (" + str(g["driver_id"]) + ") — " + str(g["contact_number"]))
+                    st.dataframe(group_to_table(group), use_container_width=True, hide_index=True)
 
     if pending == 0 and total > 0:
         st.success(stage_name + " is fully done for today!")
