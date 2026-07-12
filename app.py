@@ -83,6 +83,7 @@ def build_lists(df):
         d1_status = row.get("D_1 Status", "Pending") or "Pending"
         d2_status = row.get("D_2_Status", "Pending") or "Pending"
         dfe_status = row.get("DFE_Fees_Asked", "Not Checked") or "Not Checked"
+        dfe_amount = row.get("DFE_Fee_Amount", "")
 
         base = {}
         base["sheet_row"] = sheet_row
@@ -97,6 +98,7 @@ def build_lists(df):
         base["amount_paid"] = row.get("Amount_Paid")
         base["plan_amount"] = row.get("Plan_Amount")
         base["dfe_status"] = dfe_status
+        base["dfe_amount"] = dfe_amount
         base["usc_id"] = row.get("USC_ID")
 
         if d1_date == today:
@@ -134,7 +136,8 @@ def save_call(sheet, df, sheet_row, updates):
     sheet.batch_update(batch)
 
 
-def render_detail(item, sheet, df, unique_key):
+@st.dialog("Driver Details", width="large")
+def show_driver_dialog(item, sheet, df, unique_key):
     name_html = "<div class='detail-name'>" + str(item['driver_name']) + "</div>"
     st.markdown(name_html, unsafe_allow_html=True)
 
@@ -186,12 +189,18 @@ def render_detail(item, sheet, df, unique_key):
     notes = st.text_input("Call notes", value=item["current_notes"], key=notes_key)
 
     dfe_value = None
+    dfe_amount_value = ""
     if item["stage"] == "D+1":
         dfe_key = "dfe_" + unique_key
         dfe_default_idx = 0
         if item["dfe_status"] in DFE_OPTIONS:
             dfe_default_idx = DFE_OPTIONS.index(item["dfe_status"])
         dfe_value = st.selectbox("Did the DFE/dealer ask the driver to pay any fees?", DFE_OPTIONS, index=dfe_default_idx, key=dfe_key)
+
+        if dfe_value == "Yes":
+            dfe_amount_key = "dfeamt_" + unique_key
+            existing_amount = str(item["dfe_amount"]) if item["dfe_amount"] else ""
+            dfe_amount_value = st.text_input("How much did they ask for? (Rs)", value=existing_amount, key=dfe_amount_key)
 
     save_key = "save_" + unique_key
     if st.button("Save", key=save_key):
@@ -202,6 +211,8 @@ def render_detail(item, sheet, df, unique_key):
             errors.append("Please enter Call notes before saving.")
         if item["stage"] == "D+1" and dfe_value == "Not Checked":
             errors.append("Please answer the DFE fees question before saving.")
+        if item["stage"] == "D+1" and dfe_value == "Yes" and (not dfe_amount_value or not dfe_amount_value.strip()):
+            errors.append("Please enter the fee amount asked, since you selected Yes.")
 
         if errors:
             for e in errors:
@@ -212,6 +223,10 @@ def render_detail(item, sheet, df, unique_key):
             updates[item["notes_col"]] = notes
             if dfe_value is not None:
                 updates["DFE_Fees_Asked"] = dfe_value
+                if dfe_value == "Yes":
+                    updates["DFE_Fee_Amount"] = dfe_amount_value
+                else:
+                    updates["DFE_Fee_Amount"] = ""
             save_call(sheet, df, item["sheet_row"], updates)
             load_data.clear()
             st.success("Saved!")
@@ -224,35 +239,32 @@ def render_tab(items, sheet, df, key_prefix):
         return
 
     param_name = key_prefix + "_sel"
-    selected_idx = 0
+    selected_idx = None
     if param_name in st.query_params:
         try:
-            selected_idx = int(st.query_params[param_name])
+            candidate = int(st.query_params[param_name])
+            if 0 <= candidate < len(items):
+                selected_idx = candidate
         except Exception:
-            selected_idx = 0
-    if selected_idx >= len(items):
-        selected_idx = 0
+            selected_idx = None
 
-    list_col, detail_col = st.columns([1, 2])
+    links_html = ""
+    for idx, item in enumerate(items):
+        color = STATUS_COLOR.get(item["current_status"], "#6b7280")
+        is_selected = (idx == selected_idx)
+        if is_selected:
+            border = "3px solid white"
+        else:
+            border = "3px solid transparent"
+        label = item["driver_name"] + " (" + str(item["driver_id"]) + ") — " + item["current_status"]
+        link = "<a href='?" + param_name + "=" + str(idx) + "' target='_self' style='display:block;background:" + color + ";color:white;padding:12px 14px;border-radius:8px;margin-bottom:8px;text-decoration:none;font-weight:600;font-size:1.05rem;border:" + border + ";'>" + label + "</a>"
+        links_html = links_html + link
+    st.markdown(links_html, unsafe_allow_html=True)
 
-    with list_col:
-        links_html = ""
-        for idx, item in enumerate(items):
-            color = STATUS_COLOR.get(item["current_status"], "#6b7280")
-            is_selected = (idx == selected_idx)
-            if is_selected:
-                border = "3px solid white"
-            else:
-                border = "3px solid transparent"
-            label = item["driver_name"] + " (" + str(item["driver_id"]) + ")"
-            link = "<a href='?" + param_name + "=" + str(idx) + "' target='_self' style='display:block;background:" + color + ";color:white;padding:12px 14px;border-radius:8px;margin-bottom:8px;text-decoration:none;font-weight:600;font-size:1.05rem;border:" + border + ";'>" + label + "</a>"
-            links_html = links_html + link
-        st.markdown(links_html, unsafe_allow_html=True)
-
-    with detail_col:
+    if selected_idx is not None:
         item = items[selected_idx]
         unique_key = key_prefix + "_" + str(item["sheet_row"])
-        render_detail(item, sheet, df, unique_key)
+        show_driver_dialog(item, sheet, df, unique_key)
 
 
 def render_metric(label, value):
@@ -264,12 +276,27 @@ def group_to_table(group):
     rows = []
     for g in group:
         rows.append({
-            "Driver Name": g["driver_name"],
-            "Driver ID": g["driver_id"],
-            "Contact Number": g["contact_number"],
-            "USC ID": g["usc_id"],
+            "Driver Name": str(g["driver_name"]),
+            "Driver ID": str(g["driver_id"]),
+            "Contact Number": str(g["contact_number"]),
+            "USC ID": str(g["usc_id"]),
         })
     return pd.DataFrame(rows)
+
+
+def show_table(df_table):
+    st.dataframe(
+        df_table,
+        use_container_width=False,
+        hide_index=True,
+        column_config={
+            "Driver Name": st.column_config.TextColumn(width="medium"),
+            "Driver ID": st.column_config.TextColumn(width="small"),
+            "Contact Number": st.column_config.TextColumn(width="small"),
+            "USC ID": st.column_config.TextColumn(width="small"),
+            "Fee Amount": st.column_config.TextColumn(width="small"),
+        },
+    )
 
 
 def render_dashboard_stage(stage_name, items):
@@ -319,7 +346,7 @@ def render_dashboard_stage(stage_name, items):
             if not group:
                 st.caption("Nobody in this category.")
             else:
-                st.dataframe(group_to_table(group), use_container_width=True, hide_index=True)
+                show_table(group_to_table(group))
 
     if stage_name == "D+1 Calls":
         st.markdown("**DFE Fees Asked Breakdown**")
@@ -347,7 +374,16 @@ def render_dashboard_stage(stage_name, items):
                 if not group:
                     st.caption("Nobody in this category.")
                 else:
-                    st.dataframe(group_to_table(group), use_container_width=True, hide_index=True)
+                    rows = []
+                    for g in group:
+                        rows.append({
+                            "Driver Name": str(g["driver_name"]),
+                            "Driver ID": str(g["driver_id"]),
+                            "Contact Number": str(g["contact_number"]),
+                            "USC ID": str(g["usc_id"]),
+                            "Fee Amount": str(g["dfe_amount"]),
+                        })
+                    show_table(pd.DataFrame(rows))
 
     if pending == 0 and total > 0:
         st.success(stage_name + " is fully done for today!")
