@@ -122,7 +122,10 @@ st.markdown(
     ".metric-label { font-size:0.76rem; color:" + BRAND_GREEN + "; text-transform:uppercase; letter-spacing:0.5px; margin-top: 4px; font-weight: 600; }"
     "div.stButton > button[kind='primary'] { background-color: " + BRAND_GREEN + "; border-color: " + BRAND_GREEN + "; font-weight: 600; }"
     "div.stButton > button { border-radius: 10px; font-weight: 500; }"
-    "div.stButton > button[kind='secondary'] { border: 1px solid #e5e7eb; }"
+    "div.stButton > button[kind='secondary'] { border: 1px solid #e5e7eb; background-color: #ffffff !important; color: #111827 !important; }"
+    "div.stButton > button[kind='secondary']:hover { border-color: " + BRAND_GREEN + " !important; color: " + BRAND_GREEN + " !important; background-color: #f0fffa !important; }"
+    "div.stButton > button[kind='primary'] p { color: #ffffff !important; }"
+    "div.stButton > button[kind='secondary'] p { color: #111827 !important; }"
     "[data-testid='stDataFrame'] { border-radius: 12px; overflow: hidden; border: 1px solid #e5e7eb; }"
     ".stProgress > div > div { background-color: " + BRAND_GREEN + " !important; }"
     "[data-testid='stTextInput'] input { background-color: #f9fafb !important; color: #111827 !important; border: 1px solid #d1d5db !important; }"
@@ -359,14 +362,14 @@ def render_call_detail(item, sheet, df, unique_key):
     if item["current_notes"]:
         st.caption("Previous notes: " + str(item["current_notes"]))
 
-    notes_key = "notes_" + unique_key
-    notes = st.text_input("Call notes", value=item["current_notes"], key=notes_key)
-
     result_key = "result_" + unique_key
     result_default_idx = 0
     if item.get("call_result") in CALL_RESULT_OPTIONS:
         result_default_idx = CALL_RESULT_OPTIONS.index(item["call_result"])
     call_result = st.selectbox("Call Result", CALL_RESULT_OPTIONS, index=result_default_idx, key=result_key)
+
+    notes_key = "notes_" + unique_key
+    notes = st.text_input("Call notes", value=item["current_notes"], key=notes_key)
 
     dfe_key = "dfe_" + unique_key
     dfe_default_idx = 0
@@ -506,7 +509,7 @@ def render_generic_tab(items, sheet, df, key_prefix, detail_fn):
     list_col, detail_col = st.columns([1, 2])
     with list_col:
         for idx, item in enumerate(filtered):
-            label = "⚪ " + item["driver_name"] + " (" + str(item["driver_id"]) + ")"
+            label = item["driver_name"] + "  (" + str(item["driver_id"]) + ")"
             btn_type = "primary" if idx == st.session_state[selected_key] else "secondary"
             if st.button(label, key=key_prefix + "_btn_" + str(item["sheet_row"]), use_container_width=True, type=btn_type):
                 st.session_state[selected_key] = idx
