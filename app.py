@@ -62,7 +62,11 @@ DOM_MAP = {
     "sorabh": "Sajid",
     "khushi ram": "Sajid",
     "jasdeep": "Sajid",
+    "mohd aarif": "Sajid",
+    "aarif": "Sajid",
 }
+
+CALL_RESULT_OPTIONS = ["Connected", "Not Connected", "Incoming Not Available", "FollowUp Scheduled"]
 
 
 def get_dom(usc_name):
@@ -129,7 +133,20 @@ st.markdown(
     "ul[data-testid='stSelectboxVirtualDropdown'] { background-color: #ffffff !important; }"
     "li[role='option'] { color: #111827 !important; background-color: #ffffff !important; }"
     "li[role='option']:hover { background-color: #eafff6 !important; }"
-    ".escalation-card { border-left: 4px solid #dc2626; background: #fef2f2; border-radius: 8px; padding: 12px 16px; margin-bottom: 8px; }"
+    ".escalation-card { border-left: 4px solid #dc2626; background: #fef2f2; border-radius: 8px; padding: 12px 16px; margin-bottom: 8px; color: #111827 !important; }"
+    ".escalation-card b { color: #111827 !important; }"
+    "html, body { background-color: #f5f9ff !important; }"
+    "[data-testid='stMain'] { background: linear-gradient(160deg, #f0fffa 0%, #ffffff 30%, #f1f2ff 100%) !important; }"
+    "[data-testid='stVerticalBlockBorderWrapper'] { background-color: #ffffff !important; border-color: #e5e7eb !important; }"
+    "[data-testid='stVerticalBlockBorderWrapper'] * { color: inherit; }"
+    "div[data-testid='stMarkdownContainer'] p, div[data-testid='stMarkdownContainer'] div { color: #111827; }"
+    "[data-testid='stCaptionContainer'] p { color: #6b7280 !important; }"
+    "[data-testid='stAlertContainer'] { background-color: #ffffff !important; border: 1px solid #e5e7eb !important; }"
+    "[data-testid='stAlertContainer'] p, [data-testid='stAlertContainer'] div { color: #111827 !important; }"
+    "[data-testid='stDataFrame'] * { color: #111827 !important; }"
+    "[data-testid='stDataFrame'] { background-color: #ffffff !important; }"
+    "[data-testid='stHeadingWithActionElements'] h1, [data-testid='stHeadingWithActionElements'] h2, [data-testid='stHeadingWithActionElements'] h3 { color:" + BRAND_NAVY + " !important; }"
+    ".detail-name, .detail-value, .detail-label, .detail-sub { color-scheme: light; }"
     "</style>",
     unsafe_allow_html=True,
 )
@@ -231,6 +248,7 @@ def build_call_due_list(df):
             item["dfe_amount"] = row.get("DFE_Fee_Amount", "")
             item["is_followup"] = str(row.get("Is_Followup", "")).strip().upper() in ("TRUE", "1", "YES")
             item["current_notes"] = row.get("Call_Notes", "")
+            item["call_result"] = row.get("Call_Outcome_Detail", "")
             item["script"] = CALL_SCRIPT.format(name=row.get("Driver_Name"))
             due.append(item)
     return due
@@ -344,6 +362,12 @@ def render_call_detail(item, sheet, df, unique_key):
     notes_key = "notes_" + unique_key
     notes = st.text_input("Call notes", value=item["current_notes"], key=notes_key)
 
+    result_key = "result_" + unique_key
+    result_default_idx = 0
+    if item.get("call_result") in CALL_RESULT_OPTIONS:
+        result_default_idx = CALL_RESULT_OPTIONS.index(item["call_result"])
+    call_result = st.selectbox("Call Result", CALL_RESULT_OPTIONS, index=result_default_idx, key=result_key)
+
     dfe_key = "dfe_" + unique_key
     dfe_default_idx = 0
     if item["dfe_status"] in DFE_OPTIONS:
@@ -360,7 +384,7 @@ def render_call_detail(item, sheet, df, unique_key):
     st.write("")
     btn1, btn2, btn3 = st.columns(3)
 
-    base_updates = {"Call_Notes": notes, "DFE_Fees_Asked": dfe_value}
+    base_updates = {"Call_Notes": notes, "DFE_Fees_Asked": dfe_value, "Call_Outcome_Detail": call_result}
     if dfe_value == "Yes":
         base_updates["DFE_Fee_Amount"] = dfe_amount_value
     else:
@@ -580,7 +604,7 @@ def main():
     with st.sidebar:
         sidebar_logo_html = "<div style='display:flex;align-items:center;gap:8px;'>" + LOGO_SVG + "<span style='font-weight:700;font-size:1.1rem;'>Battery Smart</span></div>"
         st.markdown(sidebar_logo_html, unsafe_allow_html=True)
-        view = st.radio("View", ["📞 Onboarding Call Tracker", "📄 Documentation Tracker", "🚨 Escalations", "📊 Manager Dashboard"], label_visibility="collapsed")
+        view = st.radio("View", ["📞 Onboarding Call Tracker", "📄 Documentation Tracker", "🚨 Escalations", "📊 Dashboard"], label_visibility="collapsed")
         st.divider()
 
         call_stat_html = "<div class='sidebar-stat-box'><div class='sidebar-stat-num'>" + str(len(call_due)) + "</div><div class='sidebar-stat-label'>Calls Due Today</div></div>"
@@ -602,7 +626,7 @@ def main():
         render_generic_tab(docs_due, docs_sheet, docs_df, "docs", render_docs_detail)
     elif view == "🚨 Escalations":
         render_escalations_panel(call_sheet, call_df, docs_sheet, docs_df)
-    else:
+    elif view == "📊 Dashboard":
         dash_tab1, dash_tab2 = st.tabs(["Onboarding Call Tracker", "Documentation Tracker"])
         with dash_tab1:
             render_dashboard_stage(call_due, "current_status", CALL_STATUS_OPTIONS, "Onboarding Call Tracker")
@@ -612,4 +636,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
