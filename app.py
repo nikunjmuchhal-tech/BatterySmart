@@ -17,6 +17,7 @@ D1_SCRIPT = "Hello {name}, welcome to Battery Smart! This is a courtesy call to 
 D2_SCRIPT = "Hello {name}, following up — how has your experience been? Started using the vehicle regularly? Any issues with the battery or swap process?"
 
 STATUS_OPTIONS = ["Pending", "Connected", "Not Connected", "Incoming Not Available", "FollowUp Scheduled"]
+DFE_OPTIONS = ["Not Checked", "Yes", "No"]
 
 STATUS_COLOR = {
     "Pending": "#6b7280",
@@ -26,7 +27,7 @@ STATUS_COLOR = {
     "FollowUp Scheduled": "#2563eb",
 }
 
-st.markdown("<style>h1 { font-size: 2.4rem !important; } .stTabs [data-baseweb='tab'] { font-size: 1.2rem !important; padding: 10px 18px !important; } .stTabs [data-baseweb='tab-list'] { gap: 8px; } div[data-testid='stMarkdownContainer'] p { font-size: 1.05rem; } .detail-name { font-size: 1.6rem; font-weight: 700; margin-bottom: 4px; } .detail-label { font-size: 0.85rem; color: #888; text-transform: uppercase; letter-spacing: 0.5px; } .detail-value { font-size: 1.15rem; margin-bottom: 10px; }</style>", unsafe_allow_html=True)
+st.markdown("<style>h1 { font-size: 2.4rem !important; } .stTabs [data-baseweb='tab'] { font-size: 1.2rem !important; padding: 10px 18px !important; } .stTabs [data-baseweb='tab-list'] { gap: 8px; } div[data-testid='stMarkdownContainer'] p { font-size: 1.05rem; } .detail-name { font-size: 1.6rem; font-weight: 700; margin-bottom: 4px; } .detail-label { font-size: 0.85rem; color: #888; text-transform: uppercase; letter-spacing: 0.5px; } .detail-value { font-size: 1.15rem; margin-bottom: 10px; } .metric-box { background:#1e293b; border-radius:12px; padding:20px; text-align:center; } .metric-num { font-size:2.2rem; font-weight:800; } .metric-label { font-size:0.9rem; color:#94a3b8; text-transform:uppercase; }</style>", unsafe_allow_html=True)
 
 
 def check_password():
@@ -81,6 +82,7 @@ def build_lists(df):
         d2_date = parse_date(row.get("D_2_Date"))
         d1_status = row.get("D_1 Status", "Pending") or "Pending"
         d2_status = row.get("D_2_Status", "Pending") or "Pending"
+        dfe_status = row.get("DFE_Fees_Asked", "Not Checked") or "Not Checked"
 
         base = {}
         base["sheet_row"] = sheet_row
@@ -94,6 +96,7 @@ def build_lists(df):
         base["total_signup_amount"] = row.get("Total_Signup_Amount")
         base["amount_paid"] = row.get("Amount_Paid")
         base["plan_amount"] = row.get("Plan_Amount")
+        base["dfe_status"] = dfe_status
 
         if d1_date == today:
             item = dict(base)
@@ -120,14 +123,14 @@ def build_lists(df):
     return d1_list, d2_list
 
 
-def save_update(sheet, df, sheet_row, status_col, notes_col, status, notes):
+def save_call(sheet, df, sheet_row, updates):
     header = df.columns.tolist()
-    status_col_idx = header.index(status_col) + 1
-    notes_col_idx = header.index(notes_col) + 1
-    sheet.batch_update([
-        {"range": gspread.utils.rowcol_to_a1(sheet_row, status_col_idx), "values": [[status]]},
-        {"range": gspread.utils.rowcol_to_a1(sheet_row, notes_col_idx), "values": [[notes]]},
-    ])
+    batch = []
+    for col_name in updates:
+        col_idx = header.index(col_name) + 1
+        cell_range = gspread.utils.rowcol_to_a1(sheet_row, col_idx)
+        batch.append({"range": cell_range, "values": [[updates[col_name]]]})
+    sheet.batch_update(batch)
 
 
 def render_detail(item, sheet, df, unique_key):
@@ -178,9 +181,22 @@ def render_detail(item, sheet, df, unique_key):
     status = st.selectbox("Outcome", STATUS_OPTIONS, index=default_idx, key=status_key)
     notes = st.text_input("Call notes", value=item["current_notes"], key=notes_key)
 
+    dfe_value = None
+    if item["stage"] == "D+1":
+        dfe_key = "dfe_" + unique_key
+        dfe_default_idx = 0
+        if item["dfe_status"] in DFE_OPTIONS:
+            dfe_default_idx = DFE_OPTIONS.index(item["dfe_status"])
+        dfe_value = st.selectbox("Did the DFE/dealer ask the driver to pay any fees?", DFE_OPTIONS, index=dfe_default_idx, key=dfe_key)
+
     save_key = "save_" + unique_key
     if st.button("Save", key=save_key):
-        save_update(sheet, df, item["sheet_row"], item["status_col"], item["notes_col"], status, notes)
+        updates = {}
+        updates[item["status_col"]] = status
+        updates[item["notes_col"]] = notes
+        if dfe_value is not None:
+            updates["DFE_Fees_Asked"] = dfe_value
+        save_call(sheet, df, item["sheet_row"], updates)
         load_data.clear()
         st.success("Saved!")
         st.rerun()
@@ -223,11 +239,99 @@ def render_tab(items, sheet, df, key_prefix):
         render_detail(item, sheet, df, unique_key)
 
 
+def render_metric(label, value):
+    html = "<div class='metric-box'><div class='metric-num'>" + str(value) + "</div><div class='metric-label'>" + label + "</div></div>"
+    st.markdown(html, unsafe_allow_html=True)
+
+
+def render_dashboard_stage(stage_name, items):
+    st.subheader(stage_name)
+
+    total = len(items)
+    counts = {}
+    for opt in STATUS_OPTIONS:
+        counts[opt] = []
+    for item in items:
+        status = item["current_status"]
+        if status not in counts:
+            counts[status] = []
+        counts[status].append(item)
+
+    connected = len(counts.get("Connected", []))
+    pending = len(counts.get("Pending", []))
+    not_connected = len(counts.get("Not Connected", []))
+    incoming_na = len(counts.get("Incoming Not Available", []))
+    followup = len(counts.get("FollowUp Scheduled", []))
+    attempted = total - pending
+
+    cols = st.columns(6)
+    with cols[0]:
+        render_metric("Total Due", total)
+    with cols[1]:
+        render_metric("Attempted", attempted)
+    with cols[2]:
+        render_metric("Connected", connected)
+    with cols[3]:
+        render_metric("Not Connected", not_connected)
+    with cols[4]:
+        render_metric("No Incoming", incoming_na)
+    with cols[5]:
+        render_metric("Follow-up", followup)
+
+    if total > 0:
+        progress = attempted / total
+    else:
+        progress = 0
+    st.progress(progress, text=str(attempted) + " / " + str(total) + " attempted today")
+
+    for status_name in STATUS_OPTIONS:
+        group = counts.get(status_name, [])
+        label = status_name + " (" + str(len(group)) + ")"
+        with st.expander(label):
+            if not group:
+                st.caption("Nobody in this category.")
+            else:
+                for g in group:
+                    st.write(g["driver_name"] + " (" + str(g["driver_id"]) + ") — " + str(g["contact_number"]))
+
+    if stage_name == "D+1 Calls":
+        st.markdown("**DFE Fees Asked Breakdown**")
+        dfe_groups = {}
+        for opt in DFE_OPTIONS:
+            dfe_groups[opt] = []
+        for item in items:
+            dfe_val = item["dfe_status"]
+            if dfe_val not in dfe_groups:
+                dfe_groups[dfe_val] = []
+            dfe_groups[dfe_val].append(item)
+
+        dfe_cols = st.columns(3)
+        with dfe_cols[0]:
+            render_metric("Not Checked", len(dfe_groups.get("Not Checked", [])))
+        with dfe_cols[1]:
+            render_metric("Yes (Fees Asked)", len(dfe_groups.get("Yes", [])))
+        with dfe_cols[2]:
+            render_metric("No (Not Asked)", len(dfe_groups.get("No", [])))
+
+        for dfe_name in DFE_OPTIONS:
+            group = dfe_groups.get(dfe_name, [])
+            label = "DFE: " + dfe_name + " (" + str(len(group)) + ")"
+            with st.expander(label):
+                if not group:
+                    st.caption("Nobody in this category.")
+                else:
+                    for g in group:
+                        st.write(g["driver_name"] + " (" + str(g["driver_id"]) + ") — " + str(g["contact_number"]))
+
+    if pending == 0 and total > 0:
+        st.success(stage_name + " is fully done for today!")
+    elif total > 0:
+        st.warning(str(pending) + " driver(s) still pending for " + stage_name)
+
+
 def main():
     st.title("📞 Battery Smart — Onboarding Calls")
     st.caption("Financed (L5) drivers — D+1 / D+2 welcome calls")
-    st.markdown('<a href="/Dashboard" target="_blank" style="display:inline-block;background:#2563eb;color:white;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:600;">📊 Open Manager Dashboard</a>', unsafe_allow_html=True)
-    st.write("")
 
     if not check_password():
         return
@@ -236,15 +340,28 @@ def main():
     df = load_data(sheet)
     d1_list, d2_list = build_lists(df)
 
-    tab1_label = "🟢 D+1 Calls (" + str(len(d1_list)) + ")"
-    tab2_label = "🟠 D+2 Calls (" + str(len(d2_list)) + ")"
-    tab1, tab2 = st.tabs([tab1_label, tab2_label])
+    view = st.radio("View", ["📞 Calling Sheet", "📊 Manager Dashboard"], horizontal=True, label_visibility="collapsed")
 
-    with tab1:
-        render_tab(d1_list, sheet, df, "d1")
+    st.divider()
 
-    with tab2:
-        render_tab(d2_list, sheet, df, "d2")
+    if view == "📞 Calling Sheet":
+        tab1_label = "🟢 D+1 Calls (" + str(len(d1_list)) + ")"
+        tab2_label = "🟠 D+2 Calls (" + str(len(d2_list)) + ")"
+        tab1, tab2 = st.tabs([tab1_label, tab2_label])
+
+        with tab1:
+            render_tab(d1_list, sheet, df, "d1")
+
+        with tab2:
+            render_tab(d2_list, sheet, df, "d2")
+    else:
+        render_dashboard_stage("D+1 Calls", d1_list)
+        st.divider()
+        render_dashboard_stage("D+2 Calls", d2_list)
+        st.divider()
+        if st.button("🔄 Refresh Now"):
+            load_data.clear()
+            st.rerun()
 
 
 if __name__ == "__main__":
