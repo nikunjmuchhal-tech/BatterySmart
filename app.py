@@ -54,10 +54,11 @@ st.markdown(
     ".sidebar-stat-box { background: rgba(255,255,255,0.08); border-radius: 12px; padding: 14px 16px; margin-bottom: 10px; }"
     ".sidebar-stat-num { font-size: 1.6rem; font-weight: 800; color: " + BRAND_GREEN + "; }"
     ".sidebar-stat-label { font-size: 0.85rem; color: #d7d5ff; text-transform: uppercase; letter-spacing: 0.4px; }"
-    "h1 { font-size: 2.1rem !important; color:" + BRAND_NAVY + " !important; font-weight: 800 !important; }"
-    ".stTabs [data-baseweb='tab'] { font-size: 1.05rem !important; padding: 8px 16px !important; }"
-    ".stTabs [data-baseweb='tab-list'] { gap: 6px; }"
-    ".stTabs [aria-selected='true'] { color: " + BRAND_GREEN + " !important; }"
+    "h1 { font-size: 2.4rem !important; color:" + BRAND_NAVY + " !important; font-weight: 800 !important; margin-bottom: 0px !important; }"
+    "[data-testid='stCaptionContainer'] p { font-size: 1.05rem !important; color: #6b7280 !important; }"
+    ".stTabs [data-baseweb='tab'] { font-size: 1.1rem !important; font-weight: 600; padding: 10px 20px !important; background: white; border-radius: 10px 10px 0 0; }"
+    ".stTabs [data-baseweb='tab-list'] { gap: 8px; border-bottom: 2px solid #e5e7eb; }"
+    ".stTabs [aria-selected='true'] { color: " + BRAND_GREEN + " !important; border-bottom: 3px solid " + BRAND_GREEN + " !important; }"
     "div[data-testid='stMarkdownContainer'] p { font-size: 1.0rem; }"
     ".detail-card { background: white; border-radius: 16px; padding: 20px 24px; box-shadow: 0 2px 12px rgba(21,18,114,0.08); border: 1px solid #eef0ff; }"
     ".detail-name { font-size: 1.4rem; font-weight: 700; margin-bottom: 2px; color:" + BRAND_NAVY + "; }"
@@ -65,11 +66,14 @@ st.markdown(
     ".detail-label { font-size: 0.72rem; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.5px; }"
     ".detail-value { font-size: 1.0rem; margin-bottom: 8px; color: #111827; font-weight: 500; }"
     ".call-link { display:inline-block; background:" + BRAND_GREEN + "; color: #ffffff !important; padding:6px 14px; border-radius:8px; text-decoration:none; font-weight:600; font-size:0.95rem; }"
-    ".metric-box { background: linear-gradient(135deg, " + BRAND_NAVY + " 0%, #2a2496 100%); border-radius:14px; padding:16px 8px; text-align:center; box-shadow: 0 3px 10px rgba(21,18,114,0.18); }"
-    ".metric-num { font-size:1.8rem; font-weight:800; color: white; }"
-    ".metric-label { font-size:0.72rem; color:" + BRAND_GREEN + "; text-transform:uppercase; letter-spacing:0.4px; }"
-    "div.stButton > button[kind='primary'] { background-color: " + BRAND_GREEN + "; border-color: " + BRAND_GREEN + "; }"
-    "div.stButton > button { border-radius: 10px; }"
+    ".metric-box { background: linear-gradient(135deg, " + BRAND_NAVY + " 0%, #2a2496 100%); border-radius:16px; padding:20px 10px; text-align:center; box-shadow: 0 4px 14px rgba(21,18,114,0.22); border: 1px solid rgba(255,255,255,0.08); }"
+    ".metric-num { font-size:2.1rem; font-weight:800; color: white; line-height: 1.1; }"
+    ".metric-label { font-size:0.78rem; color:" + BRAND_GREEN + "; text-transform:uppercase; letter-spacing:0.5px; margin-top: 4px; font-weight: 600; }"
+    "div.stButton > button[kind='primary'] { background-color: " + BRAND_GREEN + "; border-color: " + BRAND_GREEN + "; font-weight: 600; }"
+    "div.stButton > button { border-radius: 10px; font-weight: 500; }"
+    "div.stButton > button[kind='secondary'] { border: 1px solid #e5e7eb; }"
+    "[data-testid='stDataFrame'] { border-radius: 12px; overflow: hidden; border: 1px solid #e5e7eb; }"
+    ".stProgress > div > div { background-color: " + BRAND_GREEN + " !important; }"
     "</style>",
     unsafe_allow_html=True,
 )
@@ -328,7 +332,8 @@ def render_tab(items, sheet, df, key_prefix):
 
 
 def render_metric(label, value):
-    html = "<div class='metric-box'><div class='metric-num'>" + str(value) + "</div><div class='metric-label'>" + label + "</div></div>"
+    icon = METRIC_ICONS.get(label, "")
+    html = "<div class='metric-box'><div style='font-size:1.3rem;'>" + icon + "</div><div class='metric-num'>" + str(value) + "</div><div class='metric-label'>" + label + "</div></div>"
     st.markdown(html, unsafe_allow_html=True)
 
 
@@ -381,7 +386,7 @@ def render_dashboard_stage(items):
         })
         chart_df = chart_df[chart_df["Count"] > 0]
         if not chart_df.empty:
-            st.bar_chart(chart_df.set_index("Status"), color=BRAND_GREEN if False else None)
+            st.bar_chart(chart_df.set_index("Status"), color=BRAND_GREEN)
         else:
             st.caption("No data to chart yet.")
 
@@ -416,7 +421,15 @@ def render_dashboard_stage(items):
         st.warning(str(pending) + " driver(s) still pending")
 
 
-LOGO_SVG = "<svg width='34' height='34' viewBox='0 0 300 470' style='vertical-align:middle; margin-right:10px;'><rect x='95' y='0' width='110' height='45' rx='8' fill='#00C389'/><path d='M20 65 C5 65 0 80 10 92 L140 240 L10 388 C0 400 5 415 20 415 L280 415 C295 415 300 400 290 388 L160 240 L290 92 C300 80 295 65 280 65 Z M100 130 L200 130 L150 190 Z M100 350 L200 350 L150 290 Z' fill='#00C389'/></svg>"
+LOGO_SVG = "<svg width='46' height='46' viewBox='0 0 300 470' style='vertical-align:middle; margin-right:12px;'><rect x='95' y='0' width='110' height='45' rx='8' fill='#00C389'/><path d='M20 65 C5 65 0 80 10 92 L140 240 L10 388 C0 400 5 415 20 415 L280 415 C295 415 300 400 290 388 L160 240 L290 92 C300 80 295 65 280 65 Z M100 130 L200 130 L150 190 Z M100 350 L200 350 L150 290 Z' fill='#00C389'/></svg>"
+METRIC_ICONS = {
+    "Total Due": "📋",
+    "Attempted": "☎️",
+    "Connected": "✅",
+    "Not Connected": "🕗",
+    "No Incoming": "🚫",
+    "Follow-up": "🔁",
+}
 
 def main():
     title_html = "<h1>" + LOGO_SVG + "Battery Smart — Onboarding Calls</h1>"
