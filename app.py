@@ -117,21 +117,21 @@ st.markdown(
     "[data-testid='stSidebar'] hr { border-color: rgba(255,255,255,0.15); margin: 18px 0; }"
     "[data-testid='stSidebar'] div.stButton > button { font-size: 1.0rem !important; padding: 10px 0 !important; }"
     ".sidebar-stat-box { background: rgba(255,255,255,0.08); border-radius: 12px; padding: 14px 16px; margin-bottom: 10px; }"
-    ".sidebar-stat-num { font-size: 1.6rem; font-weight: 800; color: " + BRAND_GREEN + "; }"
-    ".sidebar-stat-label { font-size: 0.85rem; color: #d7d5ff; text-transform: uppercase; letter-spacing: 0.4px; }"
+    ".sidebar-stat-num { font-size: 1.6rem; font-weight: 800; color: " + BRAND_GREEN + " !important; }"
+    ".sidebar-stat-label { font-size: 0.85rem; color: #d7d5ff !important; text-transform: uppercase; letter-spacing: 0.4px; }"
     "h1 { font-size: 2.3rem !important; color:" + BRAND_NAVY + " !important; font-weight: 800 !important; margin-bottom: 0px !important; }"
     "[data-testid='stCaptionContainer'] p { font-size: 1.05rem !important; color: #6b7280 !important; }"
     ".stTabs [data-baseweb='tab'] { font-size: 1.1rem !important; font-weight: 600; padding: 10px 20px !important; background: white; border-radius: 10px 10px 0 0; }"
     ".stTabs [data-baseweb='tab-list'] { gap: 8px; border-bottom: 2px solid #e5e7eb; }"
     ".stTabs [aria-selected='true'] { color: " + BRAND_GREEN + " !important; border-bottom: 3px solid " + BRAND_GREEN + " !important; }"
-    ".detail-name { font-size: 1.4rem; font-weight: 700; margin-bottom: 2px; color:" + BRAND_NAVY + "; }"
-    ".detail-sub { font-size: 0.9rem; color: #6b7280; margin-bottom: 12px; }"
-    ".detail-label { font-size: 0.72rem; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.5px; }"
-    ".detail-value { font-size: 1.0rem; margin-bottom: 8px; color: #111827; font-weight: 500; }"
+    ".detail-name { font-size: 1.4rem; font-weight: 700; margin-bottom: 2px; color:" + BRAND_NAVY + " !important; }"
+    ".detail-sub { font-size: 0.9rem; color: #6b7280 !important; margin-bottom: 12px; }"
+    ".detail-label { font-size: 0.72rem; color: #9ca3af !important; text-transform: uppercase; letter-spacing: 0.5px; }"
+    ".detail-value { font-size: 1.0rem; margin-bottom: 8px; color: #111827 !important; font-weight: 500; }"
     ".call-link { display:inline-block; background:" + BRAND_GREEN + "; color: #ffffff !important; padding:6px 14px; border-radius:8px; text-decoration:none; font-weight:600; font-size:0.95rem; }"
     ".metric-box { background: linear-gradient(135deg, " + BRAND_NAVY + " 0%, #2a2496 100%); border-radius:16px; padding:20px 10px; text-align:center; box-shadow: 0 4px 14px rgba(21,18,114,0.22); border: 1px solid rgba(255,255,255,0.08); }"
-    ".metric-num { font-size:2.0rem; font-weight:800; color: white; line-height: 1.1; }"
-    ".metric-label { font-size:0.76rem; color:" + BRAND_GREEN + "; text-transform:uppercase; letter-spacing:0.5px; margin-top: 4px; font-weight: 600; }"
+    ".metric-num { font-size:2.0rem; font-weight:800; color: #ffffff !important; line-height: 1.1; }"
+    ".metric-label { font-size:0.76rem; color:" + BRAND_GREEN + " !important; text-transform:uppercase; letter-spacing:0.5px; margin-top: 4px; font-weight: 600; }"
     "div.stButton > button[kind='primary'] { background-color: " + BRAND_GREEN + "; border-color: " + BRAND_GREEN + "; font-weight: 600; }"
     "div.stButton > button { border-radius: 10px; font-weight: 500; }"
     "div.stButton > button[kind='secondary'] { border: 1px solid #e5e7eb; background-color: #ffffff !important; color: #111827 !important; }"
@@ -470,8 +470,7 @@ def render_call_detail(item, sheet, df, unique_key):
                 st.rerun()
 
     with btn3:
-        followup_disabled = item["is_followup"]
-        if st.button("🔁 Follow-up Tomorrow", key="followup_" + unique_key, use_container_width=True, disabled=followup_disabled):
+        if st.button("🔁 Follow-up Tomorrow", key="followup_" + unique_key, use_container_width=True):
             updates = dict(base_updates)
             tomorrow = today_ist() + timedelta(days=1)
             updates["Call_Due_Date"] = tomorrow.strftime("%d/%m/%Y")
@@ -481,8 +480,8 @@ def render_call_detail(item, sheet, df, unique_key):
             load_call_data.clear()
             st.success("Scheduled for tomorrow!")
             st.rerun()
-        if followup_disabled:
-            st.caption("Already used the one-time follow-up for this driver.")
+        if item["is_followup"]:
+            st.caption("This driver has already had at least one follow-up before.")
 
 
 def render_docs_detail(item, sheet, df, unique_key):
