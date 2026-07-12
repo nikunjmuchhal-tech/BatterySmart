@@ -96,12 +96,14 @@ def get_dom(usc_name):
 def send_slack_alert(message):
     webhook = st.secrets.get("slack_webhook_url", "")
     if not webhook:
-        return False
+        return False, "No slack_webhook_url found in secrets."
     try:
-        requests.post(webhook, json={"text": message}, timeout=6)
-        return True
-    except Exception:
-        return False
+        resp = requests.post(webhook, json={"text": message}, timeout=6)
+        if resp.status_code == 200:
+            return True, ""
+        return False, "Slack responded with status " + str(resp.status_code) + ": " + resp.text
+    except Exception as e:
+        return False, "Request failed: " + str(e)
 
 
 st.markdown(
@@ -121,10 +123,13 @@ st.markdown(
     ".sidebar-stat-label { font-size: 0.85rem; color: #d7d5ff !important; text-transform: uppercase; letter-spacing: 0.4px; }"
     "h1 { font-size: 2.3rem !important; color:" + BRAND_NAVY + " !important; font-weight: 800 !important; margin-bottom: 0px !important; }"
     "[data-testid='stCaptionContainer'] p { font-size: 1.05rem !important; color: #6b7280 !important; }"
-    ".stTabs [data-baseweb='tab'] { font-size: 1.1rem !important; font-weight: 600; padding: 10px 20px !important; background: #f3f4f6 !important; border-radius: 10px 10px 0 0; color: #6b7280 !important; }"
-    ".stTabs [data-baseweb='tab-list'] { gap: 8px; border-bottom: 2px solid #e5e7eb; }"
-    ".stTabs [aria-selected='true'] { color: #ffffff !important; background: " + BRAND_NAVY + " !important; border-bottom: 3px solid " + BRAND_GREEN + " !important; }"
-    ".stTabs [aria-selected='true'] p { color: #ffffff !important; }"
+".stTabs [data-baseweb='tab-list'] { gap: 10px; border-bottom: none; background: #eef0f5; padding: 6px; border-radius: 999px; display: inline-flex; }"
+    ".stTabs [data-baseweb='tab'] { font-size: 1.0rem !important; font-weight: 600; padding: 8px 22px !important; background: transparent !important; border-radius: 999px !important; color: #6b7280 !important; border: none !important; outline: none !important; box-shadow: none !important; }"
+    ".stTabs [data-baseweb='tab']:focus { outline: none !important; box-shadow: none !important; }"
+    ".stTabs [aria-selected='true'] { color: " + BRAND_NAVY + " !important; background: #ffffff !important; box-shadow: 0 2px 6px rgba(21,18,114,0.15) !important; border: none !important; }"
+    ".stTabs [aria-selected='true'] p { color: " + BRAND_NAVY + " !important; font-weight: 700 !important; }"
+    ".stTabs [data-baseweb='tab-highlight'] { display: none !important; }"
+    ".stTabs [data-baseweb='tab-border'] { display: none !important; }"
     ".bs-table { width: 100%; border-collapse: collapse; font-size: 1.05rem; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 10px rgba(21,18,114,0.08); }"
     ".bs-table thead th { background: " + BRAND_NAVY + "; color: " + BRAND_GREEN + " !important; text-align: left; padding: 14px 16px; font-weight: 700; font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.4px; }"
     ".bs-table tbody td { padding: 12px 16px; border-bottom: 1px solid #eef0f5; color: #111827 !important; font-size: 1.05rem; }"
@@ -459,7 +464,7 @@ def render_call_detail(item, sheet, df, unique_key):
             updates["Escalation_Status"] = ""
             save_updates(sheet, df, item["sheet_row"], updates)
             load_call_data.clear()
-            st.success("Marked as attempted!")
+            st.toast("Marked as attempted!", icon="✅")
             st.rerun()
 
     with btn2:
@@ -473,11 +478,11 @@ def render_call_detail(item, sheet, df, unique_key):
                 save_updates(sheet, df, item["sheet_row"], updates)
                 load_call_data.clear()
                 msg = "🚨 *Case Escalated* — Onboarding Call\nDriver: " + str(item["driver_name"]) + " (" + str(item["driver_id"]) + ")\nContact: " + str(item["contact_number"]) + "\nUSC: " + fmt_val(item["usc_name"]) + "\nDOM: " + item["dom"] + "\nIssue: " + notes
-                sent = send_slack_alert(msg)
+                sent, err = send_slack_alert(msg)
                 if sent:
-                    st.success("Escalated and posted to Slack!")
+                    st.toast("Escalated and posted to Slack!", icon="✅")
                 else:
-                    st.success("Escalated (Slack not configured yet).")
+                    st.toast("Escalated, but Slack failed: " + err, icon="⚠️")
                 st.rerun()
 
     with btn3:
@@ -489,7 +494,7 @@ def render_call_detail(item, sheet, df, unique_key):
             updates["Is_Followup"] = True
             save_updates(sheet, df, item["sheet_row"], updates)
             load_call_data.clear()
-            st.success("Scheduled for tomorrow!")
+            st.toast("Scheduled for tomorrow!", icon="🔁")
             st.rerun()
         if item["is_followup"]:
             st.caption("This driver has already had at least one follow-up before.")
@@ -522,7 +527,7 @@ def render_docs_detail(item, sheet, df, unique_key):
             updates = {"Docs_Notes": notes, "Docs_Status": "Documents Received", "Escalation_Status": ""}
             save_updates(sheet, df, item["sheet_row"], updates)
             load_docs_data.clear()
-            st.success("Marked as received!")
+            st.toast("Marked as received!", icon="✅")
             st.rerun()
     with btn2:
         if st.button("🚨 Escalate to DOM", key="docsescalate_" + unique_key, use_container_width=True):
@@ -533,11 +538,11 @@ def render_docs_detail(item, sheet, df, unique_key):
                 save_updates(sheet, df, item["sheet_row"], updates)
                 load_docs_data.clear()
                 msg = "🚨 *Case Escalated* — Documentation\nDriver: " + str(item["driver_name"]) + " (" + str(item["driver_id"]) + ")\nContact: " + str(item["contact_number"]) + "\nUSC: " + fmt_val(item["usc_name"]) + "\nDOM: " + item["dom"] + "\nIssue: " + notes
-                sent = send_slack_alert(msg)
+                sent, err = send_slack_alert(msg)
                 if sent:
-                    st.success("Escalated and posted to Slack!")
+                    st.toast("Escalated and posted to Slack!", icon="✅")
                 else:
-                    st.success("Escalated (Slack not configured yet).")
+                    st.toast("Escalated, but Slack failed: " + err, icon="⚠️")
                 st.rerun()
 
 
@@ -609,7 +614,7 @@ def render_escalations_panel(call_sheet, call_df, docs_sheet, docs_df):
                 load_call_data.clear()
             else:
                 load_docs_data.clear()
-            st.success("Marked resolved!")
+            st.toast("Marked resolved!", icon="✅")
             st.rerun()
         st.write("")
 
