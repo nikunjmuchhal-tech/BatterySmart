@@ -121,9 +121,20 @@ st.markdown(
     ".sidebar-stat-label { font-size: 0.85rem; color: #d7d5ff !important; text-transform: uppercase; letter-spacing: 0.4px; }"
     "h1 { font-size: 2.3rem !important; color:" + BRAND_NAVY + " !important; font-weight: 800 !important; margin-bottom: 0px !important; }"
     "[data-testid='stCaptionContainer'] p { font-size: 1.05rem !important; color: #6b7280 !important; }"
-    ".stTabs [data-baseweb='tab'] { font-size: 1.1rem !important; font-weight: 600; padding: 10px 20px !important; background: white; border-radius: 10px 10px 0 0; }"
+    ".stTabs [data-baseweb='tab'] { font-size: 1.1rem !important; font-weight: 600; padding: 10px 20px !important; background: #f3f4f6 !important; border-radius: 10px 10px 0 0; color: #6b7280 !important; }"
     ".stTabs [data-baseweb='tab-list'] { gap: 8px; border-bottom: 2px solid #e5e7eb; }"
-    ".stTabs [aria-selected='true'] { color: " + BRAND_GREEN + " !important; border-bottom: 3px solid " + BRAND_GREEN + " !important; }"
+    ".stTabs [aria-selected='true'] { color: #ffffff !important; background: " + BRAND_NAVY + " !important; border-bottom: 3px solid " + BRAND_GREEN + " !important; }"
+    ".stTabs [aria-selected='true'] p { color: #ffffff !important; }"
+    ".bs-table { width: 100%; border-collapse: collapse; font-size: 1.05rem; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 10px rgba(21,18,114,0.08); }"
+    ".bs-table thead th { background: " + BRAND_NAVY + "; color: " + BRAND_GREEN + " !important; text-align: left; padding: 14px 16px; font-weight: 700; font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.4px; }"
+    ".bs-table tbody td { padding: 12px 16px; border-bottom: 1px solid #eef0f5; color: #111827 !important; font-size: 1.05rem; }"
+    ".bs-table tbody tr:hover { background: #f0fffa; }"
+    ".status-pill { padding: 4px 12px; border-radius: 20px; font-size: 0.85rem; font-weight: 700; display: inline-block; }"
+    ".status-pill.pending { background: #f3f4f6; color: #6b7280 !important; }"
+    ".status-pill.call-attempted { background: #dcfce7; color: #16a34a !important; }"
+    ".status-pill.documents-received { background: #dcfce7; color: #16a34a !important; }"
+    ".status-pill.escalated-to-dom { background: #fee2e2; color: #dc2626 !important; }"
+    ".status-pill.follow-up-needed { background: #dbeafe; color: #2563eb !important; }"
     ".detail-name { font-size: 1.4rem; font-weight: 700; margin-bottom: 2px; color:" + BRAND_NAVY + " !important; }"
     ".detail-sub { font-size: 0.9rem; color: #6b7280 !important; margin-bottom: 12px; }"
     ".detail-label { font-size: 0.72rem; color: #9ca3af !important; text-transform: uppercase; letter-spacing: 0.5px; }"
@@ -647,7 +658,22 @@ def render_dashboard_stage(items, status_options):
             "USC": fmt_val(g["usc_name"]),
             "Call Status": g["status"],
         })
-    st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+
+    table_html = "<table class='bs-table'><thead><tr>"
+    for col_name in ["Driver Name", "Driver ID", "Contact Number", "USC", "Call Status"]:
+        table_html += "<th>" + col_name + "</th>"
+    table_html += "</tr></thead><tbody>"
+    for row in rows:
+        table_html += "<tr>"
+        table_html += "<td>" + row["Driver Name"] + "</td>"
+        table_html += "<td>" + row["Driver ID"] + "</td>"
+        table_html += "<td>" + row["Contact Number"] + "</td>"
+        table_html += "<td>" + row["USC"] + "</td>"
+        status_class = "status-pill " + row["Call Status"].replace(" ", "-").lower()
+        table_html += "<td><span class='" + status_class + "'>" + row["Call Status"] + "</span></td>"
+        table_html += "</tr>"
+    table_html += "</tbody></table>"
+    st.markdown(table_html, unsafe_allow_html=True)
 
 
 def main():
