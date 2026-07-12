@@ -173,3 +173,34 @@ def render_section(items, sheet, df, key_prefix):
 
         default_idx = STATUS_OPTIONS.index(item["current_status"]) if item["current_status"] in STATUS_OPTIONS else 0
         status = st.selectbox("Outcome", STATUS_OPTIONS, index=default_idx, key=status_key)
+        notes = st.text_input("Call notes", value=item["current_notes"], key=notes_key)
+
+        if st.button("Save", key="save_" + key_prefix + "_" + str(item['sheet_row'])):
+            save_update(sheet, df, item["sheet_row"], item["status_col"], item["notes_col"], status, notes)
+            st.cache_resource.clear()
+            st.success("Saved!")
+            st.rerun()
+
+
+def main():
+    st.title("📞 Battery Smart — Onboarding Calls")
+    st.caption("Financed (L5) drivers — D+1 / D+2 welcome calls")
+
+    if not check_password():
+        return
+
+    sheet = get_sheet()
+    df = load_data(sheet)
+    d1_list, d2_list = build_lists(df)
+
+    tab1, tab2 = st.tabs(["🟢 D+1 Calls (" + str(len(d1_list)) + ")", "🟠 D+2 Calls (" + str(len(d2_list)) + ")"])
+
+    with tab1:
+        render_section(d1_list, sheet, df, "d1")
+
+    with tab2:
+        render_section(d2_list, sheet, df, "d2")
+
+
+if __name__ == "__main__":
+    main()
