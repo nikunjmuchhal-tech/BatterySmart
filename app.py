@@ -18,12 +18,12 @@ D2_SCRIPT = "Hello {name}, following up — how has your experience been? Starte
 
 STATUS_OPTIONS = ["Pending", "Connected", "Not Connected", "Incoming Not Available", "FollowUp Scheduled"]
 
-STATUS_DOT = {
-    "Pending": "⚪",
-    "Connected": "🟢",
-    "Not Connected": "🟡",
-    "Incoming Not Available": "🔴",
-    "FollowUp Scheduled": "🔵",
+STATUS_COLOR = {
+    "Pending": "#6b7280",
+    "Connected": "#16a34a",
+    "Not Connected": "#eab308",
+    "Incoming Not Available": "#dc2626",
+    "FollowUp Scheduled": "#2563eb",
 }
 
 st.markdown("""
@@ -155,65 +155,4 @@ def render_detail(item, sheet, df, unique_key):
     st.info("**Script:** " + item["script"])
 
     if item["current_notes"]:
-        st.caption("Previous notes: " + str(item["current_notes"]))
-
-    status_key = "status_" + unique_key
-    notes_key = "notes_" + unique_key
-
-    default_idx = STATUS_OPTIONS.index(item["current_status"]) if item["current_status"] in STATUS_OPTIONS else 0
-    status = st.selectbox("Outcome", STATUS_OPTIONS, index=default_idx, key=status_key)
-    notes = st.text_input("Call notes", value=item["current_notes"], key=notes_key)
-
-    if st.button("Save", key="save_" + unique_key):
-        save_update(sheet, df, item["sheet_row"], item["status_col"], item["notes_col"], status, notes)
-        st.cache_resource.clear()
-        st.success("Saved!")
-        st.rerun()
-
-
-def render_tab(items, sheet, df, key_prefix):
-    if not items:
-        st.success("No calls due right now.")
-        return
-
-    selected_key = "selected_" + key_prefix
-    if selected_key not in st.session_state or st.session_state[selected_key] >= len(items):
-        st.session_state[selected_key] = 0
-
-    list_col, detail_col = st.columns([1, 2])
-
-    with list_col:
-        for idx, item in enumerate(items):
-            dot = STATUS_DOT.get(item["current_status"], "⚪")
-            label = dot + " " + item["driver_name"] + " (" + str(item["driver_id"]) + ")"
-            btn_type = "primary" if idx == st.session_state[selected_key] else "secondary"
-            if st.button(label, key=key_prefix + "_btn_" + str(idx), use_container_width=True, type=btn_type):
-                st.session_state[selected_key] = idx
-
-    with detail_col:
-        item = items[st.session_state[selected_key]]
-        render_detail(item, sheet, df, key_prefix + "_" + str(item["sheet_row"]))
-
-
-def main():
-    st.title("📞 Battery Smart — Onboarding Calls")
-    st.caption("Financed (L5) drivers — D+1 / D+2 welcome calls")
-
-    if not check_password():
-        return
-
-    sheet = get_sheet()
-    df = load_data(sheet)
-    d1_list, d2_list = build_lists(df)
-
-    tab1, tab2 = st.tabs(["🟢 D+1 Calls (" + str(len(d1_list)) + ")", "🟠 D+2 Calls (" + str(len(d2_list)) + ")"])
-
-    with tab1:
-        render_tab(d1_list, sheet, df, "d1")
-
-    with tab2:
-        render_tab(d2_list, sheet, df, "d2")
-
-
-if __name__ == "__main__":
-    main()
+        st.caption("Previous notes: " +
