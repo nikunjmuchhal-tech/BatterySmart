@@ -19,7 +19,7 @@ CALL_SCRIPT = "Hello {name}, welcome to Battery Smart! This is a courtesy call t
 DOCS_SCRIPT = "Hello {name}, this is Battery Smart calling regarding your vehicle documents. Have you received your RC and other vehicle documents yet?"
 
 CALL_STATUS_OPTIONS = ["Pending", "Call Attempted", "Escalated to DOM", "Follow-up Needed"]
-DOCS_STATUS_OPTIONS = ["Pending", "Documents Received", "Escalated to DOM"]
+DOCS_STATUS_OPTIONS = ["Pending", "Documents Received", "Not Received", "Escalated to DOM"]
 DFE_OPTIONS = ["Not Checked", "Yes", "No"]
 
 STATUS_DOT = {
@@ -139,6 +139,7 @@ st.markdown(
     ".status-pill.call-attempted { background: #dcfce7; color: #16a34a !important; }"
     ".status-pill.documents-received { background: #dcfce7; color: #16a34a !important; }"
     ".status-pill.escalated-to-dom { background: #fee2e2; color: #dc2626 !important; }"
+    ".status-pill.not-received { background: #ffedd5; color: #ea580c !important; }"
     ".status-pill.follow-up-needed { background: #dbeafe; color: #2563eb !important; }"
     ".detail-name { font-size: 1.4rem; font-weight: 700; margin-bottom: 2px; color:" + BRAND_NAVY + " !important; }"
     ".detail-sub { font-size: 0.9rem; color: #6b7280 !important; margin-bottom: 12px; }"
@@ -338,6 +339,11 @@ def build_docs_due_list(df):
             item["usc_id"] = row.get("USC_ID")
             item["usc_name"] = row.get("USC_Name")
             item["dom"] = get_dom(row.get("USC_Name"))
+            item["dealership"] = row.get("Dealership")
+            item["vehicle_model"] = row.get("Vehicle_Model")
+            item["total_signup_amount"] = row.get("Total_Signup_Amount")
+            item["amount_paid"] = row.get("Amount_Paid")
+            item["plan_amount"] = row.get("Plan_Amount")
             item["current_notes"] = row.get("Docs_Notes", "")
             item["script"] = DOCS_SCRIPT.format(name=row.get("Driver_Name"))
             due.append(item)
@@ -502,14 +508,28 @@ def render_docs_detail(item, sheet, df, unique_key):
     with detail_box:
         name_html = "<div class='detail-name'>" + str(item['driver_name']) + "</div><div class='detail-sub'>Driver ID: " + str(item['driver_id']) + " &nbsp;|&nbsp; USC: " + fmt_val(item['usc_name']) + " &nbsp;|&nbsp; DOM: " + item['dom'] + "</div>"
         st.markdown(name_html, unsafe_allow_html=True)
+
         tel_number = str(item['contact_number']).strip()
         if tel_number and tel_number.lower() != "nan":
             call_html = "<a class='call-link' href='tel:" + tel_number + "'>📱 Call " + tel_number + "</a>"
             st.markdown(call_html, unsafe_allow_html=True)
-        zone_html = "<div class='detail-label'>Zone</div><div class='detail-value'>" + fmt_val(item['zone']) + "</div>"
-        st.markdown(zone_html, unsafe_allow_html=True)
-        onboard_html = "<div class='detail-label'>Onboarding Date</div><div class='detail-value'>" + fmt_val(item['onboarding_date']) + "</div>"
-        st.markdown(onboard_html, unsafe_allow_html=True)
+        st.write("")
+
+        c1, c2 = st.columns(2)
+        with c1:
+            zone_html = "<div class='detail-label'>Zone</div><div class='detail-value'>" + fmt_val(item['zone']) + "</div>"
+            st.markdown(zone_html, unsafe_allow_html=True)
+            onboard_html = "<div class='detail-label'>Onboarding Date</div><div class='detail-value'>" + fmt_val(item['onboarding_date']) + "</div>"
+            st.markdown(onboard_html, unsafe_allow_html=True)
+            dealer_html = "<div class='detail-label'>Dealership</div><div class='detail-value'>" + fmt_val(item['dealership']) + "</div>"
+            st.markdown(dealer_html, unsafe_allow_html=True)
+        with c2:
+            vehicle_html = "<div class='detail-label'>Vehicle</div><div class='detail-value'>" + fmt_val(item['vehicle_model']) + "</div>"
+            st.markdown(vehicle_html, unsafe_allow_html=True)
+            price_html = "<div class='detail-label'>Vehicle Price / Amount Paid</div><div class='detail-value'>" + fmt_money(item['total_signup_amount']) + " / " + fmt_money(item['amount_paid']) + "</div>"
+            st.markdown(price_html, unsafe_allow_html=True)
+            plan_html = "<div class='detail-label'>Plan Amount (EMI/Subscription)</div><div class='detail-value'>" + fmt_money(item['plan_amount']) + "</div>"
+            st.markdown(plan_html, unsafe_allow_html=True)
 
     st.write("")
     st.info("**Script:** " + item["script"])
@@ -518,7 +538,7 @@ def render_docs_detail(item, sheet, df, unique_key):
 
     notes = st.text_input("Call notes", value=item["current_notes"], key="docsnotes_" + unique_key)
 
-    btn1, btn2 = st.columns(2)
+    btn1, btn2, btn3 = st.columns(3)
     with btn1:
         if st.button("✅ Documents Received", key="docsdone_" + unique_key, type="primary", use_container_width=True):
             updates = {"Docs_Notes": notes, "Docs_Status": "Documents Received", "Escalation_Status": ""}
@@ -527,6 +547,13 @@ def render_docs_detail(item, sheet, df, unique_key):
             st.toast("Marked as received!", icon="✅")
             st.rerun()
     with btn2:
+        if st.button("❌ Not Received", key="docsnotreceived_" + unique_key, use_container_width=True):
+            updates = {"Docs_Notes": notes, "Docs_Status": "Not Received"}
+            save_updates(sheet, df, item["sheet_row"], updates)
+            load_docs_data.clear()
+            st.toast("Marked as not received.", icon="❌")
+            st.rerun()
+    with btn3:
         if st.button("🚨 Escalate to DOM", key="docsescalate_" + unique_key, use_container_width=True):
             if not notes or not notes.strip():
                 st.warning("Please add notes before escalating.")
@@ -599,6 +626,10 @@ def render_escalations_panel(call_sheet, call_df, docs_sheet, docs_df):
     for e in filtered:
         card_html = "<div class='escalation-card'><b>" + str(e["driver_name"]) + "</b> (" + str(e["driver_id"]) + ") &nbsp;|&nbsp; " + e["source"] + " &nbsp;|&nbsp; USC: " + fmt_val(e["usc_name"]) + " &nbsp;|&nbsp; DOM: <b>" + e["dom"] + "</b><br>Contact: " + str(e["contact_number"]) + "<br>Notes: " + str(e["notes"]) + "</div>"
         st.markdown(card_html, unsafe_allow_html=True)
+
+        resolution_key = "resolution_note_" + e["source"] + "_" + str(e["sheet_row"])
+        resolution_note = st.text_input("Resolution notes (optional)", key=resolution_key, placeholder="What was done to fix this?")
+
         resolve_key = "resolve_" + e["source"] + "_" + str(e["sheet_row"])
         if st.button("Mark Resolved", key=resolve_key):
             target_sheet = call_sheet if e["source"] == "Onboarding Call" else docs_sheet
@@ -608,7 +639,12 @@ def render_escalations_panel(call_sheet, call_df, docs_sheet, docs_df):
                 load_call_data.clear()
             else:
                 load_docs_data.clear()
-            st.toast("Marked resolved!", icon="✅")
+
+            resolve_msg = "✅ *Case Resolved* — " + e["source"] + "\nDriver: " + str(e["driver_name"]) + " (" + str(e["driver_id"]) + ")\nDOM: " + e["dom"]
+            if resolution_note and resolution_note.strip():
+                resolve_msg += "\nResolution: " + resolution_note
+            sent, err = send_slack_alert(resolve_msg)
+            st.session_state["last_slack_result"] = (sent, err, e["driver_name"] + " (resolved)")
             st.rerun()
         st.write("")
 
@@ -686,7 +722,7 @@ def main():
     if "last_slack_result" in st.session_state:
         sent, err, driver_name = st.session_state.pop("last_slack_result")
         if sent:
-            st.success("Escalated " + driver_name + " and posted to Slack!")
+            st.success(driver_name + " — posted to Slack!")
         else:
             st.error("Escalated " + driver_name + ", but Slack failed: " + err)
 
