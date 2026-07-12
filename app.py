@@ -199,4 +199,239 @@ def render_detail(item, sheet, df, unique_key):
         vehicle_html = "<div class='detail-label'>Vehicle</div><div class='detail-value'>" + str(item['vehicle_model']) + "</div>"
         st.markdown(vehicle_html, unsafe_allow_html=True)
 
-        price_html = "<div class='detail-label'>Vehicle Price / Amount Paid</div><div class='detail-value'>Rs " + str(item['total_signup_amount']) + " / Rs " +
+        price_html = "<div class='detail-label'>Vehicle Price / Amount Paid</div><div class='detail-value'>Rs " + str(item['total_signup_amount']) + " / Rs " + str(item['amount_paid']) + "</div>"
+        st.markdown(price_html, unsafe_allow_html=True)
+
+        plan_html = "<div class='detail-label'>Plan Amount (EMI/Subscription)</div><div class='detail-value'>Rs " + str(item['plan_amount']) + "</div>"
+        st.markdown(plan_html, unsafe_allow_html=True)
+
+    st.markdown("</div>", unsafe_allow_html=True)
+    st.write("")
+
+    script_text = "**Script:** " + item["script"]
+    st.info(script_text)
+
+    if item["current_notes"]:
+        notes_caption = "Previous notes: " + str(item["current_notes"])
+        st.caption(notes_caption)
+
+    status_key = "status_" + unique_key
+    notes_key = "notes_" + unique_key
+
+    default_idx = 0
+    if item["current_status"] in STATUS_OPTIONS:
+        default_idx = STATUS_OPTIONS.index(item["current_status"])
+
+    col_a, col_b = st.columns(2)
+    with col_a:
+        status = st.selectbox("Outcome", STATUS_OPTIONS, index=default_idx, key=status_key)
+    with col_b:
+        notes = st.text_input("Call notes (optional)", value=item["current_notes"], key=notes_key)
+
+    dfe_value = None
+    dfe_amount_value = ""
+    if item["stage"] == "D+1":
+        dfe_key = "dfe_" + unique_key
+        dfe_default_idx = 0
+        if item["dfe_status"] in DFE_OPTIONS:
+            dfe_default_idx = DFE_OPTIONS.index(item["dfe_status"])
+
+        col_c, col_d = st.columns(2)
+        with col_c:
+            dfe_value = st.selectbox("DFE/dealer asked for fees? (optional)", DFE_OPTIONS, index=dfe_default_idx, key=dfe_key)
+        if dfe_value == "Yes":
+            with col_d:
+                dfe_amount_key = "dfeamt_" + unique_key
+                existing_amount = str(item["dfe_amount"]) if item["dfe_amount"] else ""
+                dfe_amount_value = st.text_input("Fee amount asked (Rs)", value=existing_amount, key=dfe_amount_key)
+
+    save_key = "save_" + unique_key
+    if st.button("💾 Save", key=save_key, type="primary", use_container_width=True):
+        updates = {}
+        updates[item["status_col"]] = status
+        updates[item["notes_col"]] = notes
+        if dfe_value is not None:
+            updates["DFE_Fees_Asked"] = dfe_value
+            if dfe_value == "Yes":
+                updates["DFE_Fee_Amount"] = dfe_amount_value
+            else:
+                updates["DFE_Fee_Amount"] = ""
+        save_call(sheet, df, item["sheet_row"], updates)
+        load_data.clear()
+        st.success("Saved!")
+        st.rerun()
+
+
+def render_tab(items, sheet, df, key_prefix):
+    if not items:
+        st.success("No calls due right now.")
+        return
+
+    selected_key = "selected_" + key_prefix
+    search_key = "search_" + key_prefix
+
+    if selected_key not in st.session_state:
+        st.session_state[selected_key] = 0
+
+    search_term = st.text_input("🔍 Search by name or ID", key=search_key, placeholder="Type to filter the list...")
+
+    filtered = items
+    if search_term:
+        term = search_term.strip().lower()
+        filtered = [it for it in items if term in str(it["driver_name"]).lower() or term in str(it["driver_id"]).lower()]
+
+    if not filtered:
+        st.warning("No matches for that search.")
+        return
+
+    if st.session_state[selected_key] >= len(filtered):
+        st.session_state[selected_key] = 0
+
+    list_col, detail_col = st.columns([1, 2])
+
+    with list_col:
+        for idx, item in enumerate(filtered):
+            dot = STATUS_DOT.get(item["current_status"], "⚪")
+            label = dot + " " + item["driver_name"] + " (" + str(item["driver_id"]) + ")"
+            btn_type = "primary" if idx == st.session_state[selected_key] else "secondary"
+            if st.button(label, key=key_prefix + "_btn_" + str(item["sheet_row"]), use_container_width=True, type=btn_type):
+                st.session_state[selected_key] = idx
+
+    with detail_col:
+        item = filtered[st.session_state[selected_key]]
+        unique_key = key_prefix + "_" + str(item["sheet_row"])
+        render_detail(item, sheet, df, unique_key)
+
+
+def render_metric(label, value):
+    html = "<div class='metric-box'><div class='metric-num'>" + str(value) + "</div><div class='metric-label'>" + label + "</div></div>"
+    st.markdown(html, unsafe_allow_html=True)
+
+
+def render_dashboard_stage(items):
+    total = len(items)
+    counts = {}
+    for opt in STATUS_OPTIONS:
+        counts[opt] = 0
+    for item in items:
+        status = item["current_status"]
+        if status not in counts:
+            counts[status] = 0
+        counts[status] += 1
+
+    connected = counts.get("Connected", 0)
+    pending = counts.get("Pending", 0)
+    not_connected = counts.get("Not Connected", 0)
+    incoming_na = counts.get("Incoming Not Available", 0)
+    followup = counts.get("FollowUp Scheduled", 0)
+    attempted = total - pending
+
+    cols = st.columns(6)
+    with cols[0]:
+        render_metric("Total Due", total)
+    with cols[1]:
+        render_metric("Attempted", attempted)
+    with cols[2]:
+        render_metric("Connected", connected)
+    with cols[3]:
+        render_metric("Not Connected", not_connected)
+    with cols[4]:
+        render_metric("No Incoming", incoming_na)
+    with cols[5]:
+        render_metric("Follow-up", followup)
+
+    st.write("")
+
+    if total > 0:
+        progress = attempted / total
+    else:
+        progress = 0
+    st.progress(progress, text=str(attempted) + " / " + str(total) + " attempted today")
+
+    chart_col, table_col = st.columns([1, 2])
+
+    with chart_col:
+        chart_df = pd.DataFrame({
+            "Status": list(counts.keys()),
+            "Count": list(counts.values()),
+        })
+        chart_df = chart_df[chart_df["Count"] > 0]
+        if not chart_df.empty:
+            st.bar_chart(chart_df.set_index("Status"))
+        else:
+            st.caption("No data to chart yet.")
+
+    all_rows = []
+    for g in items:
+        row = {
+            "Driver Name": str(g["driver_name"]),
+            "Driver ID": str(g["driver_id"]),
+            "Contact Number": str(g["contact_number"]),
+            "USC ID": str(g["usc_id"]),
+            "Status": g["current_status"],
+        }
+        if "dfe_status" in g:
+            row["DFE Asked"] = g["dfe_status"]
+            row["Fee Amount"] = str(g["dfe_amount"]) if g["dfe_amount"] else ""
+        all_rows.append(row)
+
+    with table_col:
+        if all_rows:
+            table_df = pd.DataFrame(all_rows)
+            filter_options = ["All"] + STATUS_OPTIONS
+            chosen = st.selectbox("Filter by status", filter_options, key="filter_" + str(id(items)))
+            if chosen != "All":
+                table_df = table_df[table_df["Status"] == chosen]
+            st.dataframe(table_df, use_container_width=True, hide_index=True, height=min(360, 45 + 35 * len(table_df)))
+        else:
+            st.caption("Nobody in this list today.")
+
+    if pending == 0 and total > 0:
+        st.success("Fully done for today!")
+    elif total > 0:
+        st.warning(str(pending) + " driver(s) still pending")
+
+
+def main():
+    title_html = "<h1><span class='logo-badge'>⚡</span>Battery Smart — Onboarding Calls</h1>"
+    st.markdown(title_html, unsafe_allow_html=True)
+    st.caption("Financed (L5) drivers — D+1 / D+2 welcome calls")
+
+    if not check_password():
+        return
+
+    sheet = get_sheet()
+    df = load_data(sheet)
+    d1_list, d2_list = build_lists(df)
+
+    with st.sidebar:
+        st.markdown("### ⚡ Battery Smart")
+        view = st.radio("View", ["📞 Calling Sheet", "📊 Manager Dashboard"], label_visibility="collapsed")
+        st.divider()
+        st.caption("D+1 due today: " + str(len(d1_list)))
+        st.caption("D+2 due today: " + str(len(d2_list)))
+        st.divider()
+        if st.button("🔄 Refresh Data", use_container_width=True):
+            load_data.clear()
+            st.rerun()
+
+    if view == "📞 Calling Sheet":
+        tab1_label = "🟢 D+1 Calls (" + str(len(d1_list)) + ")"
+        tab2_label = "🟠 D+2 Calls (" + str(len(d2_list)) + ")"
+        tab1, tab2 = st.tabs([tab1_label, tab2_label])
+
+        with tab1:
+            render_tab(d1_list, sheet, df, "d1")
+
+        with tab2:
+            render_tab(d2_list, sheet, df, "d2")
+    else:
+        dash_tab1, dash_tab2 = st.tabs(["D+1 Calls", "D+2 Calls"])
+        with dash_tab1:
+            render_dashboard_stage(d1_list)
+        with dash_tab2:
+            render_dashboard_stage(d2_list)
+
+
+if __name__ == "__main__":
+    main()
