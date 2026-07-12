@@ -63,6 +63,7 @@ DOM_MAP = {
     "sorabh": "Sajid",
     "khushi ram": "Sajid",
     "jasdeep": "Sajid",
+    "sahil": "Sajid",
     "mohd aarif": "Sajid",
     "aarif": "Sajid",
 }
