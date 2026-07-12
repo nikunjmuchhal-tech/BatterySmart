@@ -18,13 +18,13 @@ DOCS_SHEET_TAB = "Docs Tracker"
 CALL_SCRIPT = "Hello {name}, welcome to Battery Smart! This is a courtesy call to confirm you're settling in well. Any questions about onboarding, your plan, or the app?"
 DOCS_SCRIPT = "Hello {name}, this is Battery Smart calling regarding your vehicle documents. Have you received your RC and other vehicle documents yet?"
 
-CALL_STATUS_OPTIONS = ["Pending", "Call Completed", "Escalated to DOM", "Follow-up Needed"]
+CALL_STATUS_OPTIONS = ["Pending", "Call Attempted", "Escalated to DOM", "Follow-up Needed"]
 DOCS_STATUS_OPTIONS = ["Pending", "Documents Received", "Escalated to DOM"]
 DFE_OPTIONS = ["Not Checked", "Yes", "No"]
 
 STATUS_DOT = {
     "Pending": "⚪",
-    "Call Completed": "🟢",
+    "Call Attempted": "🟢",
     "Escalated to DOM": "🔴",
     "Follow-up Needed": "🔵",
     "Documents Received": "🟢",
@@ -160,6 +160,8 @@ st.markdown(
     "[data-testid='stAlertContainer'] p, [data-testid='stAlertContainer'] div { color: #111827 !important; }"
     "[data-testid='stDataFrame'] * { color: #111827 !important; }"
     "[data-testid='stDataFrame'] { background-color: #ffffff !important; }"
+    "[data-testid='stDataFrame'] [role='columnheader'] { background-color: " + BRAND_NAVY + " !important; color: " + BRAND_GREEN + " !important; font-weight: 800 !important; font-size: 1.05rem !important; }"
+    "[data-testid='stDataFrame'] [role='columnheader'] * { color: " + BRAND_GREEN + " !important; }"
     "[data-testid='stHeadingWithActionElements'] h1, [data-testid='stHeadingWithActionElements'] h2, [data-testid='stHeadingWithActionElements'] h3 { color:" + BRAND_NAVY + " !important; }"
     ".detail-name, .detail-value, .detail-label, .detail-sub { color-scheme: light; }"
     "</style>",
@@ -267,6 +269,40 @@ def build_call_due_list(df):
             item["script"] = CALL_SCRIPT.format(name=row.get("Driver_Name"))
             due.append(item)
     return due
+
+
+def build_call_today_all(df):
+    today = today_ist()
+    rows = []
+    for i, row in df.iterrows():
+        due_date = parse_date(row.get("Call_Due_Date"))
+        if due_date == today:
+            rows.append({
+                "driver_id": row.get("Driver_ID"),
+                "driver_name": row.get("Driver_Name"),
+                "contact_number": row.get("Contact_Number"),
+                "usc_name": row.get("USC_Name"),
+                "dom": get_dom(row.get("USC_Name")),
+                "status": row.get("Call_Status", "Pending") or "Pending",
+            })
+    return rows
+
+
+def build_docs_today_all(df):
+    today = today_ist()
+    rows = []
+    for i, row in df.iterrows():
+        due_date = parse_date(row.get("Docs_Call_Due_Date"))
+        if due_date == today:
+            rows.append({
+                "driver_id": row.get("Driver_ID"),
+                "driver_name": row.get("Driver_Name"),
+                "contact_number": row.get("Contact_Number"),
+                "usc_name": row.get("USC_Name"),
+                "dom": get_dom(row.get("USC_Name")),
+                "status": row.get("Docs_Status", "Pending") or "Pending",
+            })
+    return rows
 
 
 def build_docs_due_list(df):
@@ -406,13 +442,13 @@ def render_call_detail(item, sheet, df, unique_key):
         base_updates["DFE_Fee_Amount"] = ""
 
     with btn1:
-        if st.button("✅ Call Completed", key="complete_" + unique_key, type="primary", use_container_width=True):
+        if st.button("✅ Call Attempted", key="complete_" + unique_key, type="primary", use_container_width=True):
             updates = dict(base_updates)
-            updates["Call_Status"] = "Call Completed"
+            updates["Call_Status"] = "Call Attempted"
             updates["Escalation_Status"] = ""
             save_updates(sheet, df, item["sheet_row"], updates)
             load_call_data.clear()
-            st.success("Marked complete!")
+            st.success("Marked as attempted!")
             st.rerun()
 
     with btn2:
@@ -568,34 +604,49 @@ def render_escalations_panel(call_sheet, call_df, docs_sheet, docs_df):
         st.write("")
 
 
-def render_dashboard_stage(items, status_field, status_options, title):
+def render_dashboard_stage(items, status_options):
     total = len(items)
     counts = {}
     for opt in status_options:
         counts[opt] = 0
     for item in items:
-        pass
+        s = item["status"]
+        if s not in counts:
+            counts[s] = 0
+        counts[s] += 1
 
-    cols = st.columns(3)
+    pending = counts.get("Pending", 0)
+    attempted = counts.get("Call Attempted", 0) + counts.get("Documents Received", 0)
+    escalated = counts.get("Escalated to DOM", 0)
+    followup = counts.get("Follow-up Needed", 0)
+
+    cols = st.columns(4)
     with cols[0]:
         render_metric("Total Due", total)
     with cols[1]:
-        render_metric("Pending", total)
+        render_metric("Pending", pending)
     with cols[2]:
-        render_metric("Completed", 0)
+        render_metric("Completed", attempted)
+    with cols[3]:
+        render_metric("Escalated", escalated)
 
     if total == 0:
         st.caption("Nobody in this list today.")
         return
 
+    st.write("")
+    status_filter_options = ["All"] + sorted(set(item["status"] for item in items))
+    chosen_status = st.selectbox("Filter by Call Status", status_filter_options, key="dash_status_filter_" + str(id(items)))
+    filtered_items = items if chosen_status == "All" else [it for it in items if it["status"] == chosen_status]
+
     rows = []
-    for g in items:
+    for g in filtered_items:
         rows.append({
             "Driver Name": str(g["driver_name"]),
             "Driver ID": str(g["driver_id"]),
             "Contact Number": str(g["contact_number"]),
             "USC": fmt_val(g["usc_name"]),
-            "DOM": g["dom"],
+            "Call Status": g["status"],
         })
     st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
 
@@ -643,11 +694,13 @@ def main():
     elif view == "🚨 Escalations":
         render_escalations_panel(call_sheet, call_df, docs_sheet, docs_df)
     elif view == "📊 Dashboard":
+        call_today_all = build_call_today_all(call_df)
+        docs_today_all = build_docs_today_all(docs_df)
         dash_tab1, dash_tab2 = st.tabs(["Onboarding Call Tracker", "Documentation Tracker"])
         with dash_tab1:
-            render_dashboard_stage(call_due, "current_status", CALL_STATUS_OPTIONS, "Onboarding Call Tracker")
+            render_dashboard_stage(call_today_all, CALL_STATUS_OPTIONS)
         with dash_tab2:
-            render_dashboard_stage(docs_due, "current_status", DOCS_STATUS_OPTIONS, "Documentation Tracker")
+            render_dashboard_stage(docs_today_all, DOCS_STATUS_OPTIONS)
 
 
 if __name__ == "__main__":
