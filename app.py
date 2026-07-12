@@ -136,8 +136,7 @@ def save_call(sheet, df, sheet_row, updates):
     sheet.batch_update(batch)
 
 
-@st.dialog("Driver Details", width="large")
-def show_driver_dialog(item, sheet, df, unique_key):
+def render_detail(item, sheet, df, unique_key):
     name_html = "<div class='detail-name'>" + str(item['driver_name']) + "</div>"
     st.markdown(name_html, unsafe_allow_html=True)
 
@@ -239,49 +238,40 @@ def render_tab(items, sheet, df, key_prefix):
         return
 
     param_name = key_prefix + "_sel"
-    selected_idx = None
+    selected_idx = 0
     if param_name in st.query_params:
         try:
-            candidate = int(st.query_params[param_name])
-            if 0 <= candidate < len(items):
-                selected_idx = candidate
+            selected_idx = int(st.query_params[param_name])
         except Exception:
-            selected_idx = None
+            selected_idx = 0
+    if selected_idx >= len(items):
+        selected_idx = 0
 
-    links_html = ""
-    for idx, item in enumerate(items):
-        color = STATUS_COLOR.get(item["current_status"], "#6b7280")
-        is_selected = (idx == selected_idx)
-        if is_selected:
-            border = "3px solid white"
-        else:
-            border = "3px solid transparent"
-        label = item["driver_name"] + " (" + str(item["driver_id"]) + ") — " + item["current_status"]
-        link = "<a href='?" + param_name + "=" + str(idx) + "' target='_self' style='display:block;background:" + color + ";color:white;padding:12px 14px;border-radius:8px;margin-bottom:8px;text-decoration:none;font-weight:600;font-size:1.05rem;border:" + border + ";'>" + label + "</a>"
-        links_html = links_html + link
-    st.markdown(links_html, unsafe_allow_html=True)
+    list_col, detail_col = st.columns([1, 2])
 
-    if selected_idx is not None:
+    with list_col:
+        links_html = ""
+        for idx, item in enumerate(items):
+            color = STATUS_COLOR.get(item["current_status"], "#6b7280")
+            is_selected = (idx == selected_idx)
+            if is_selected:
+                border = "3px solid white"
+            else:
+                border = "3px solid transparent"
+            label = item["driver_name"] + " (" + str(item["driver_id"]) + ")"
+            link = "<a href='?" + param_name + "=" + str(idx) + "' target='_self' style='display:block;background:" + color + ";color:white;padding:12px 14px;border-radius:8px;margin-bottom:8px;text-decoration:none;font-weight:600;font-size:1.05rem;border:" + border + ";'>" + label + "</a>"
+            links_html = links_html + link
+        st.markdown(links_html, unsafe_allow_html=True)
+
+    with detail_col:
         item = items[selected_idx]
         unique_key = key_prefix + "_" + str(item["sheet_row"])
-        show_driver_dialog(item, sheet, df, unique_key)
+        render_detail(item, sheet, df, unique_key)
 
 
 def render_metric(label, value):
     html = "<div class='metric-box'><div class='metric-num'>" + str(value) + "</div><div class='metric-label'>" + label + "</div></div>"
     st.markdown(html, unsafe_allow_html=True)
-
-
-def group_to_table(group):
-    rows = []
-    for g in group:
-        rows.append({
-            "Driver Name": str(g["driver_name"]),
-            "Driver ID": str(g["driver_id"]),
-            "Contact Number": str(g["contact_number"]),
-            "USC ID": str(g["usc_id"]),
-        })
-    return pd.DataFrame(rows)
 
 
 def show_table(df_table):
@@ -346,7 +336,15 @@ def render_dashboard_stage(stage_name, items):
             if not group:
                 st.caption("Nobody in this category.")
             else:
-                show_table(group_to_table(group))
+                rows = []
+                for g in group:
+                    rows.append({
+                        "Driver Name": str(g["driver_name"]),
+                        "Driver ID": str(g["driver_id"]),
+                        "Contact Number": str(g["contact_number"]),
+                        "USC ID": str(g["usc_id"]),
+                    })
+                show_table(pd.DataFrame(rows))
 
     if stage_name == "D+1 Calls":
         st.markdown("**DFE Fees Asked Breakdown**")
