@@ -8,7 +8,7 @@ def today_ist():
 import gspread
 from google.oauth2.service_account import Credentials
 
-st.set_page_config(page_title="Battery Smart - Onboarding Calls", layout="centered")
+st.set_page_config(page_title="Battery Smart - Onboarding Calls", layout="wide")
 
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 SHEET_TAB = "Call Logs"
@@ -17,6 +17,19 @@ D1_SCRIPT = "Hello {name}, welcome to Battery Smart! This is a courtesy call to 
 D2_SCRIPT = "Hello {name}, following up — how has your experience been? Started using the vehicle regularly? Any issues with the battery or swap process?"
 
 STATUS_OPTIONS = ["Pending", "Connected", "Not Connected", "Incoming Not Available", "FollowUp Scheduled"]
+
+st.markdown("""
+<style>
+h1 { font-size: 2.4rem !important; }
+.stTabs [data-baseweb="tab"] { font-size: 1.2rem !important; padding: 10px 18px !important; }
+.stTabs [data-baseweb="tab-list"] { gap: 8px; }
+div[data-testid="stMarkdownContainer"] p { font-size: 1.05rem; }
+.driver-btn button { font-size: 1.05rem !important; text-align: left !important; }
+.detail-name { font-size: 1.6rem; font-weight: 700; margin-bottom: 4px; }
+.detail-label { font-size: 0.85rem; color: #888; text-transform: uppercase; letter-spacing: 0.5px; }
+.detail-value { font-size: 1.15rem; margin-bottom: 10px; }
+</style>
+""", unsafe_allow_html=True)
 
 
 def check_password():
@@ -70,89 +83,7 @@ def build_lists(df):
         d1_status = row.get("D_1 Status", "Pending")
         d2_status = row.get("D_2_Status", "Pending")
 
-        if d1_date == today and d1_status != "Connected":
-            d1_list.append({
-                "sheet_row": sheet_row, "stage": "D+1",
-                "driver_id": row.get("Driver_ID"), "driver_name": row.get("Driver_Name"),
-                "zone": row.get("Zone"), "onboarding_date": row.get("Onboarding_Date"),
-                "due_date": d1_date,
-                "status_col": "D_1 Status", "notes_col": "D_1_Notes",
-                "current_status": d1_status, "current_notes": row.get("D_1_Notes", ""),
-                "script": D1_SCRIPT.format(name=row.get("Driver_Name")),
-            })
-
-        if d2_date == today and d2_status != "Connected":
-            d2_list.append({
-                "sheet_row": sheet_row, "stage": "D+2",
-                "driver_id": row.get("Driver_ID"), "driver_name": row.get("Driver_Name"),
-                "zone": row.get("Zone"), "onboarding_date": row.get("Onboarding_Date"),
-                "due_date": d2_date,
-                "status_col": "D_2_Status", "notes_col": "D_2_Notes",
-                "current_status": d2_status, "current_notes": row.get("D_2_Notes", ""),
-                "script": D2_SCRIPT.format(name=row.get("Driver_Name")),
-            })
-
-    return d1_list, d2_list
-
-
-def save_update(sheet, df, sheet_row, status_col, notes_col, status, notes):
-    header = df.columns.tolist()
-    status_col_idx = header.index(status_col) + 1
-    notes_col_idx = header.index(notes_col) + 1
-    sheet.update_cell(sheet_row, status_col_idx, status)
-    sheet.update_cell(sheet_row, notes_col_idx, notes)
-
-
-def render_call_card(item, sheet, df):
-    label = f"{item['driver_name']} ({item['driver_id']})"
-    with st.expander(label):
-        st.write(f"**Zone:** {item['zone']}  |  **Onboarded:** {item['onboarding_date']}  |  **Due:** {item['due_date']}")
-        st.info(f"**Script:** {item['script']}")
-
-        if item["current_notes"]:
-            st.caption(f"Previous notes: {item['current_notes']}")
-
-        status_key = f"status_{item['sheet_row']}_{item['stage']}"
-        notes_key = f"notes_{item['sheet_row']}_{item['stage']}"
-
-        default_idx = STATUS_OPTIONS.index(item["current_status"]) if item["current_status"] in STATUS_OPTIONS else 0
-        status = st.selectbox("Outcome", STATUS_OPTIONS, index=default_idx, key=status_key)
-        notes = st.text_input("Call notes", value=item["current_notes"], key=notes_key)
-
-        if st.button("Save", key=f"save_{item['sheet_row']}_{item['stage']}"):
-            save_update(sheet, df, item["sheet_row"], item["status_col"], item["notes_col"], status, notes)
-            st.cache_resource.clear()
-            st.success("Saved!")
-            st.rerun()
-
-
-def main():
-    st.title("📞 Battery Smart — Onboarding Calls")
-    st.caption("Financed (L5) drivers — D+1 / D+2 welcome calls")
-
-    if not check_password():
-        return
-
-    sheet = get_sheet()
-    df = load_data(sheet)
-    d1_list, d2_list = build_lists(df)
-
-    tab1, tab2 = st.tabs([f"🟢 D+1 Calls ({len(d1_list)})", f"🟠 D+2 Calls ({len(d2_list)})"])
-
-    with tab1:
-        if not d1_list:
-            st.success("No D+1 calls due today.")
-        else:
-            for item in d1_list:
-                render_call_card(item, sheet, df)
-
-    with tab2:
-        if not d2_list:
-            st.success("No D+2 calls due today.")
-        else:
-            for item in d2_list:
-                render_call_card(item, sheet, df)
-
-
-if __name__ == "__main__":
-    main()
+        base = {
+            "sheet_row": sheet_row,
+            "driver_id": row.get("Driver_ID"), "driver_name": row.get("Driver_Name"),
+            "contact_number": row.get("Contact_Number"), "zone":
