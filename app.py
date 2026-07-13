@@ -15,60 +15,33 @@ SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 CALL_SHEET_TAB = "Call Logs"
 DOCS_SHEET_TAB = "Docs Tracker"
 
-CALL_SCRIPT = """1. Call Opening
-Agent: Namaste! Main Battery Smart se {name} baat kar raha/rahi hoon. Kya mera baat [Customer Name] ji se ho raha hai?
+CALL_SCRIPT = """Agent: Namaste! Main Battery Smart se Sheetal baat kar raha/rahi hoon. Kya mera baat [Customer Name] ji se ho raha hai?
 Agent: Sir/Ma'am, sabse pehle Battery Smart family mein aapka swagat hai! Aur aapke naye vehicle ki purchase ke liye bahut-bahut badhaii!
 Agent: Sir, kya aap please confirm kar sakte hain ki aapne kaunsa vehicle model liya hai?
-Agent: Aur uska color kya hai?
-
-2. Delivery Experience Check
 Agent: Sir, aapki vehicle delivery kaisi rahi? Koi issue toh nahi aaya delivery ke time?
-Delivery issue (if any): __________________________________________
 
-3. EMI / Payment Confirmation
-Agent: Sir, ab main aapko payment ke baare mein kuch important information dena chahti hoon. Kya aapne apni EMI Autopay start kar di hai?
-
-3a. If EMI already started
-Agent: Great sir! Kya aap confirm kar sakte hain ki EMI amount kitna set hua hai aur payment date kya hai?
+Agent: Sir, hamare data ke according aapne Autopay system chalu kr liya hai / nahi kra hai?
+Agent: Kya aap confirm kar sakte hain ki EMI amount kitna set hua hai aur payment date kya hai?
 EMI Amount confirmed: __________
 Payment Date confirmed: __________
-Agent: Perfect, bas make sure karein ki har mahine time par payment ho jaye, taaki koi late fee ya issue na ho. Daily fees - Rs 150
+Agent: Perfect, bas make sure karein ki har mahine time par payment kar de, taaki koi late fee ya issue na ho.
 
-3b. If EMI not yet started
-Agent: Sir, agar aapne abhi tak EMI start nahi ki hai toh please jald hi start kar lein. Aapko yeh keh dun ki aapka payment specifically Upgrid Solutions ke through ek link ke zariye transfer hoga.
+If EMI not yet started:
+Agent: Sir, agar aapne abhi tak UPI Autopay start nahi ki hai toh please jald hi start kar lein. Aapko payment specifically Upgrid Solutions ke through aayi ek link par karna hai.
 Agent: Woh link aapke registered number par SMS/WhatsApp ke through aayega. Kindly us link par click karke apni payment details verify karke EMI setup complete kar lein.
 
-4. Closing
-Agent: Sir/Ma'am, aapka time dene ke liye bahut dhanyavaad. Agar aapko koi bhi query ho Battery Smart ya EMI payment se related, toh aap humein kabhi bhi isi number par contact kar sakte hain.
+Agent: Sir/Ma'am, aapka time dene ke liye bahut dhanyavaad. Agar aapko koi bhi query ho Battery Smart ya UPI payment se related, toh aap humein kabhi bhi isi number par contact kar sakte hain.
 Agent: Ek baar phir se, Battery Smart family mein aapka swagat hai. Have a great day!"""
 
 CALL_2_SCRIPT = CALL_SCRIPT
 
-DOCS_SCRIPT = """Battery Smart – D+10/11 Document Status Check Call Script
-Purpose: Follow-up call to check status of Invoice, Number Plate & Insurance
-
-1. Call Opening
-Agent: Namaste! Main Battery Smart se baat kar raha/rahi hoon. Kya mera baat [Customer Name] ji se ho raha hai?
-[Wait for confirmation. If wrong number/unavailable, politely end call and note for callback.]
+DOCS_SCRIPT = """Agent: Namaste! Main Battery Smart se Sheetal baat kar raha/rahi hoon. Kya mera baat [Customer Name] ji se ho raha hai?
 Agent: Sir/Ma'am, hum aapko ek chota sa follow-up call kar rahe hain, aapke vehicle ke documents ka status check karne ke liye.
 
-2. Document Status Check
-Ask about each document one by one:
-Agent: Sir, kya aapko invoice number mil chuka hai?
-Agent: Aur number plate, wo aapko receive hui hai kya?
-Agent: Insurance document ke baare mein bhi bata dijiye, wo aapke paas aa gaya hai kya?
-Reason of pending document: __________________________________________
-
-3. Quick Service Review
-Agent: Sir, ek chota sa feedback chahiye tha - overall aapki Battery Smart ke saath ab tak ki service kaisi rahi hai?
-Agent: Koi issue ya complaint hai jo aap share karna chahenge?
-Feedback / issue (if any): __________________________________________
-
-4. Closing
-Agent: Sir/Ma'am, aapka time dene ke liye bahut dhanyavaad. Agar aapko aage payment ya document ya koi query ho, toh aap humein contact kar sakte hain.
-Agent: Have a great day, Battery Smart family mein aapka saath dene ke liye shukriya!
-
-[Note: Post-documentation, this account will be handed over to the EMI team for further follow-up.]"""
+1. Sir, kya aapko invoice number, number plate and insurance document mil gaye hai?
+2. If not - reason
+3. Sir, ek chota sa feedback chahiye tha - overall aapki Battery Smart ke saath ab tak ki service kaisi rahi hai? Koi issue ya complaint hai jo aap share karna chahenge?
+4. Sir/Ma'am, aapka time dene ke liye bahut dhanyavaad. Agar aapko aage payment ya document ya koi query ho, toh aap humein contact kar sakte hain. Battery Smart family mein aapka saath dene ke liye shukriya!"""
 
 CALL_STATUS_OPTIONS = ["Pending", "Call Attempted", "Escalated to DOM", "Follow-up Needed"]
 DOCS_STATUS_OPTIONS = ["Pending", "Documents Received", "Not Received", "Escalated to DOM"]
@@ -217,6 +190,10 @@ st.markdown(
     ".status-pill.escalated-to-dom { background: #fee2e2; color: #dc2626 !important; }"
     ".status-pill.not-received { background: #ffedd5; color: #ea580c !important; }"
     ".status-pill.follow-up-needed { background: #dbeafe; color: #2563eb !important; }"
+    ".status-pill.connected { background: #dcfce7; color: #16a34a !important; }"
+    ".status-pill.not-connected { background: #fee2e2; color: #dc2626 !important; }"
+    ".status-pill.incoming-not-available { background: #ffedd5; color: #ea580c !important; }"
+    ".status-pill.followup-scheduled { background: #dbeafe; color: #2563eb !important; }"
     ".detail-name { font-size: 1.4rem; font-weight: 700; margin-bottom: 2px; color:" + BRAND_NAVY + " !important; }"
     ".detail-sub { font-size: 0.9rem; color: #6b7280 !important; margin-bottom: 12px; }"
     ".detail-label { font-size: 0.72rem; color: #9ca3af !important; text-transform: uppercase; letter-spacing: 0.5px; }"
@@ -903,27 +880,20 @@ def render_dashboard_stage(items, status_options):
     chosen_status = st.selectbox("Filter by Call Status", status_filter_options, key="dash_status_filter_" + str(id(items)))
     filtered_items = items if chosen_status == "All" else [it for it in items if it["status"] == chosen_status]
 
-    has_call_result = any("call_result" in it for it in filtered_items)
-
     rows = []
     for g in filtered_items:
-        row_data = {
+        call_result = g.get("call_result")
+        display_status = call_result if call_result and call_result != "—" else g["status"]
+        rows.append({
             "Driver Name": str(g["driver_name"]),
             "Driver ID": str(g["driver_id"]),
             "Contact Number": str(g["contact_number"]),
             "USC": fmt_val(g["usc_name"]),
-            "Call Status": g["status"],
-        }
-        if has_call_result:
-            row_data["Call Response"] = fmt_val(g.get("call_result"))
-        rows.append(row_data)
-
-    columns = ["Driver Name", "Driver ID", "Contact Number", "USC", "Call Status"]
-    if has_call_result:
-        columns.append("Call Response")
+            "Call Status": display_status,
+        })
 
     table_html = "<table class='bs-table'><thead><tr>"
-    for col_name in columns:
+    for col_name in ["Driver Name", "Driver ID", "Contact Number", "USC", "Call Status"]:
         table_html += "<th>" + col_name + "</th>"
     table_html += "</tr></thead><tbody>"
     for row in rows:
@@ -934,8 +904,6 @@ def render_dashboard_stage(items, status_options):
         table_html += "<td>" + row["USC"] + "</td>"
         status_class = "status-pill " + row["Call Status"].replace(" ", "-").lower()
         table_html += "<td><span class='" + status_class + "'>" + row["Call Status"] + "</span></td>"
-        if has_call_result:
-            table_html += "<td>" + row["Call Response"] + "</td>"
         table_html += "</tr>"
     table_html += "</tbody></table>"
     st.markdown(table_html, unsafe_allow_html=True)
@@ -999,3 +967,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
