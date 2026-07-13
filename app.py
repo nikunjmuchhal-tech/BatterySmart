@@ -838,23 +838,32 @@ def render_docs_detail(item, sheet, df, unique_key):
                 current_status = "Unset"
             current_doc_values[label] = current_status
 
+            # "Flash" state: buttons only show filled for one render pass right
+            # after you click them (immediate feedback), then go back to plain
+            # outlined on every subsequent load/rerun - they never persist a
+            # filled look just because that's what's saved in the sheet.
+            flash_key = "doc_flash_" + item_key + "_" + unique_key
+            flash = st.session_state.pop(flash_key, None)
+
             row_c1, row_c3, row_c4 = st.columns([2.4, 1.3, 1.3])
             with row_c1:
                 st.markdown("**" + label + "**")
             with row_c3:
                 with st.container(key="docok_wrap_" + item_key + "_" + unique_key):
-                    ok_type = "primary" if current_status == "Received" else "secondary"
+                    ok_type = "primary" if flash == "Received" else "secondary"
                     if st.button("✅ Received", key="doc_ok_" + item_key + "_" + unique_key, type=ok_type, use_container_width=True):
                         save_updates(sheet, df, item["sheet_row"], {sheet_col: "Received"})
                         load_docs_data.clear()
+                        st.session_state[flash_key] = "Received"
                         st.toast(label + " marked received!", icon="✅")
                         st.rerun()
             with row_c4:
                 with st.container(key="docno_wrap_" + item_key + "_" + unique_key):
-                    no_type = "primary" if current_status == "Not Received" else "secondary"
+                    no_type = "primary" if flash == "Not Received" else "secondary"
                     if st.button("❌ Not Received", key="doc_no_" + item_key + "_" + unique_key, type=no_type, use_container_width=True):
                         save_updates(sheet, df, item["sheet_row"], {sheet_col: "Not Received"})
                         load_docs_data.clear()
+                        st.session_state[flash_key] = "Not Received"
                         st.toast(label + " marked not received.", icon="❌")
                         st.rerun()
 
