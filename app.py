@@ -824,11 +824,18 @@ def render_docs_detail(item, sheet, df, unique_key):
             st.markdown("<span class='detail-label'>&nbsp;</span>", unsafe_allow_html=True)
 
         for item_key, sheet_col, label in DOC_ITEMS:
-            raw_status = item.get(item_key, "Not Received")
-            # Normalize: anything that isn't exactly "Received" (including legacy
-            # values like "Not Collected" from before the Received/Not Received
-            # rename, or a blank cell) counts as Not Received for display/logic.
-            current_status = "Received" if str(raw_status).strip() == "Received" else "Not Received"
+            raw_status = str(item.get(item_key, "")).strip()
+            # Three states: "Received" and "Not Received" are only shown as
+            # filled/selected when that exact value was explicitly set by a
+            # click. Anything else (blank cell, or legacy values like "Not
+            # Collected" from before the rename) is "unset" - neither button
+            # is highlighted, same look as an untouched Received button.
+            if raw_status == "Received":
+                current_status = "Received"
+            elif raw_status == "Not Received":
+                current_status = "Not Received"
+            else:
+                current_status = "Unset"
             current_doc_values[label] = current_status
 
             row_c1, row_c3, row_c4 = st.columns([2.4, 1.3, 1.3])
@@ -1180,3 +1187,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
