@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import requests
+import json
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 IST = ZoneInfo("Asia/Kolkata")
@@ -27,15 +28,29 @@ Payment Date confirmed: __________
 Agent: Perfect, bas make sure karein ki har mahine time par payment kar de, taaki koi late fee ya issue na ho.
 
 If EMI not yet started:
-Agent: Sir, agar aapne abhi tak UPI Autopay start nahi ki hai toh please jald hi start kar lein. Ham abhi aapki Autopay setup mein sahayta kar sakte hai  Aapko payment specifically Upgrid Solutions ke through aayi ek link par karna hai.
+Agent: Sir, agar aapne abhi tak UPI Autopay start nahi ki hai toh please jald hi start kar lein. Aapko payment specifically Upgrid Solutions ke through aayi ek link par karna hai.
 Agent: Woh link aapke registered number par SMS/WhatsApp ke through aayega. Kindly us link par click karke apni payment details verify karke EMI setup complete kar lein.
-
-Kya aapse hamare DFE ne koi extra Fees li thi ? ?
 
 Agent: Sir/Ma'am, aapka time dene ke liye bahut dhanyavaad. Agar aapko koi bhi query ho Battery Smart ya UPI payment se related, toh aap humein kabhi bhi isi number par contact kar sakte hain.
 Agent: Ek baar phir se, Battery Smart family mein aapka swagat hai. Have a great day!"""
 
 CALL_2_SCRIPT = CALL_SCRIPT
+
+# Which onboarding-call stages are currently active. Scaling initially covers
+# D+1 through D+7; once volume settles down, just change this list back to
+# [1, 2] to reduce to the original D+1/D+2 flow - no other code changes needed.
+CALL_STAGES = [1, 2, 3, 4, 5, 6, 7]
+
+
+def call_stage_columns(stage):
+    if stage == 1:
+        return "Call_Due_Date", "Call_Status", "Call_Notes", "Is_Followup"
+    return (
+        "Call_" + str(stage) + "_Due_Date",
+        "Call_" + str(stage) + "_Status",
+        "Call_" + str(stage) + "_Notes",
+        "Is_Followup_" + str(stage),
+    )
 
 DOCS_SCRIPT = """Agent: Namaste! Main Battery Smart se Sheetal baat kar raha/rahi hoon. Kya mera baat [Customer Name] ji se ho raha hai?
 Agent: Sir/Ma'am, hum aapko ek chota sa follow-up call kar rahe hain, aapke vehicle ke documents ka status check karne ke liye.
@@ -145,6 +160,54 @@ def send_slack_alert(message):
         return False, "Slack responded with status " + str(resp.status_code) + ": " + resp.text
     except Exception as e:
         return False, "Request failed: " + str(e)
+
+
+def send_slack_message(text, thread_ts=None, driver_id=None, source=None, include_button=False):
+    """
+    Posts via the Slack Bot Token (chat.postMessage) instead of the Incoming Webhook,
+    so we get back a message `ts` we can thread replies under, and so we can attach
+    a real interactive "Mark Resolved" button.
+    Requires st.secrets["slack_bot_token"] and st.secrets["slack_channel_id"].
+    Returns (ok: bool, ts: str|None, error: str)
+    """
+    token = st.secrets.get("slack_bot_token", "")
+    channel = st.secrets.get("slack_channel_id", "")
+    if not token or not channel:
+        return False, None, "No slack_bot_token / slack_channel_id found in secrets."
+
+    payload = {"channel": channel, "text": text}
+    if thread_ts:
+        payload["thread_ts"] = thread_ts
+    if include_button and driver_id and source:
+        payload["blocks"] = [
+            {"type": "section", "text": {"type": "mrkdwn", "text": text}},
+            {
+                "type": "actions",
+                "elements": [
+                    {
+                        "type": "button",
+                        "text": {"type": "plain_text", "text": "✅ Mark Resolved", "emoji": True},
+                        "style": "primary",
+                        "action_id": "mark_resolved",
+                        "value": json.dumps({"source": source, "driver_id": str(driver_id)}),
+                    }
+                ],
+            },
+        ]
+
+    try:
+        resp = requests.post(
+            "https://slack.com/api/chat.postMessage",
+            headers={"Authorization": "Bearer " + token, "Content-Type": "application/json; charset=utf-8"},
+            json=payload,
+            timeout=6,
+        )
+        data = resp.json()
+        if data.get("ok"):
+            return True, data.get("ts"), ""
+        return False, None, "Slack error: " + str(data.get("error"))
+    except Exception as e:
+        return False, None, "Request failed: " + str(e)
 
 
 st.markdown(
@@ -331,69 +394,96 @@ def build_call_due_list(df):
         base["autopay_status"] = row.get("Autopay_Mandate_Status", "")
         base["emi_due_date"] = row.get("EMI_Due_Date", "")
 
-        # Call 1 (D+1)
-        due_date_1 = parse_date(row.get("Call_Due_Date"))
-        status_1 = row.get("Call_Status", "Pending") or "Pending"
-        if due_date_1 == today and status_1 == "Pending":
-            item = dict(base)
-            item["call_num"] = 1
-            item["stage_label"] = "D+1"
-            item["status_col"] = "Call_Status"
-            item["notes_col"] = "Call_Notes"
-            item["due_col"] = "Call_Due_Date"
-            item["followup_flag_col"] = "Is_Followup"
-            item["is_followup"] = str(row.get("Is_Followup", "")).strip().upper() in ("TRUE", "1", "YES")
-            item["current_notes"] = row.get("Call_Notes", "")
-            item["show_dfe"] = True
-            item["script"] = CALL_SCRIPT.format(name=row.get("Driver_Name"))
-            due.append(item)
-
-        # Call 2 (D+2)
-        due_date_2 = parse_date(row.get("Call_2_Due_Date"))
-        status_2 = row.get("Call_2_Status", "Pending") or "Pending"
-        if due_date_2 == today and status_2 == "Pending":
-            item = dict(base)
-            item["call_num"] = 2
-            item["stage_label"] = "D+2"
-            item["status_col"] = "Call_2_Status"
-            item["notes_col"] = "Call_2_Notes"
-            item["due_col"] = "Call_2_Due_Date"
-            item["followup_flag_col"] = "Is_Followup_2"
-            item["is_followup"] = str(row.get("Is_Followup_2", "")).strip().upper() in ("TRUE", "1", "YES")
-            item["current_notes"] = row.get("Call_2_Notes", "")
-            item["show_dfe"] = False
-            item["script"] = CALL_2_SCRIPT.format(name=row.get("Driver_Name"))
-            due.append(item)
+        for stage in CALL_STAGES:
+            due_col, status_col, notes_col, followup_col = call_stage_columns(stage)
+            due_date = parse_date(row.get(due_col))
+            status = row.get(status_col, "Pending") or "Pending"
+            if due_date == today and status == "Pending":
+                item = dict(base)
+                item["call_num"] = stage
+                item["stage_label"] = "D+" + str(stage)
+                item["status_col"] = status_col
+                item["notes_col"] = notes_col
+                item["due_col"] = due_col
+                item["followup_flag_col"] = followup_col
+                item["is_followup"] = str(row.get(followup_col, "")).strip().upper() in ("TRUE", "1", "YES")
+                item["current_notes"] = row.get(notes_col, "")
+                item["show_dfe"] = (stage == 1)
+                item["script"] = CALL_SCRIPT.format(name=row.get("Driver_Name"))
+                due.append(item)
 
     return due
+
+
+def build_call_all_records(df):
+    """
+    Every driver, every stage, regardless of due date or current status.
+    Used by the 'Search & Edit Any Record' box so an agent can reopen and
+    correct an entry (e.g. a driver who calls back later after being marked
+    Not Connected earlier), even though it's no longer in today's due list.
+    """
+    records = []
+    for i, row in df.iterrows():
+        base = {}
+        base["sheet_row"] = i + 2
+        base["driver_id"] = row.get("Driver_ID")
+        base["driver_name"] = row.get("Driver_Name")
+        base["contact_number"] = row.get("Contact_Number")
+        base["zone"] = row.get("Zone")
+        base["onboarding_date"] = row.get("Onboarding_Date")
+        base["dealership"] = row.get("Dealership")
+        base["vehicle_model"] = row.get("Vehicle_Model")
+        base["total_signup_amount"] = row.get("Total_Signup_Amount")
+        base["amount_paid"] = row.get("Amount_Paid")
+        base["plan_amount"] = row.get("Plan_Amount")
+        base["usc_id"] = row.get("USC_ID")
+        base["usc_name"] = row.get("USC_Name")
+        base["dom"] = get_dom(row.get("USC_Name"))
+        base["dfe_status"] = row.get("DFE_Fees_Asked", "Not Checked") or "Not Checked"
+        base["dfe_amount"] = row.get("DFE_Fee_Amount", "")
+        base["call_result"] = row.get("Call_Outcome_Detail", "")
+        base["autopay_status"] = row.get("Autopay_Mandate_Status", "")
+        base["emi_due_date"] = row.get("EMI_Due_Date", "")
+
+        for stage in CALL_STAGES:
+            due_col, status_col, notes_col, followup_col = call_stage_columns(stage)
+            due_date = row.get(due_col)
+            if not due_date:
+                continue
+            item = dict(base)
+            item["call_num"] = stage
+            item["stage_label"] = "D+" + str(stage)
+            item["status_col"] = status_col
+            item["notes_col"] = notes_col
+            item["due_col"] = due_col
+            item["followup_flag_col"] = followup_col
+            item["is_followup"] = str(row.get(followup_col, "")).strip().upper() in ("TRUE", "1", "YES")
+            item["current_notes"] = row.get(notes_col, "")
+            item["current_status"] = row.get(status_col, "Pending") or "Pending"
+            item["show_dfe"] = (stage == 1)
+            item["script"] = CALL_SCRIPT.format(name=row.get("Driver_Name"))
+            records.append(item)
+
+    return records
 
 
 def build_call_today_all(df):
     today = today_ist()
     rows = []
     for i, row in df.iterrows():
-        due_date_1 = parse_date(row.get("Call_Due_Date"))
-        if due_date_1 == today:
-            rows.append({
-                "driver_id": row.get("Driver_ID"),
-                "driver_name": row.get("Driver_Name") + " [D+1]",
-                "contact_number": row.get("Contact_Number"),
-                "usc_name": row.get("USC_Name"),
-                "dom": get_dom(row.get("USC_Name")),
-                "status": row.get("Call_Status", "Pending") or "Pending",
-                "call_result": row.get("Call_Outcome_Detail", "") or "—",
-            })
-        due_date_2 = parse_date(row.get("Call_2_Due_Date"))
-        if due_date_2 == today:
-            rows.append({
-                "driver_id": row.get("Driver_ID"),
-                "driver_name": row.get("Driver_Name") + " [D+2]",
-                "contact_number": row.get("Contact_Number"),
-                "usc_name": row.get("USC_Name"),
-                "dom": get_dom(row.get("USC_Name")),
-                "status": row.get("Call_2_Status", "Pending") or "Pending",
-                "call_result": row.get("Call_Outcome_Detail", "") or "—",
-            })
+        for stage in CALL_STAGES:
+            due_col, status_col, _, _ = call_stage_columns(stage)
+            due_date = parse_date(row.get(due_col))
+            if due_date == today:
+                rows.append({
+                    "driver_id": row.get("Driver_ID"),
+                    "driver_name": row.get("Driver_Name") + " [D+" + str(stage) + "]",
+                    "contact_number": row.get("Contact_Number"),
+                    "usc_name": row.get("USC_Name"),
+                    "dom": get_dom(row.get("USC_Name")),
+                    "status": row.get(status_col, "Pending") or "Pending",
+                    "call_result": row.get("Call_Outcome_Detail", "") or "—",
+                })
     return rows
 
 
@@ -461,6 +551,7 @@ def build_escalations(call_df, docs_df):
                 "dom": get_dom(row.get("USC_Name")),
                 "notes": row.get("Call_Notes", ""),
                 "status_col": "Escalation_Status",
+                "slack_ts": row.get("Slack_Message_Ts", "") or "",
             })
     for i, row in docs_df.iterrows():
         if str(row.get("Escalation_Status", "")).strip() == "Open":
@@ -477,6 +568,7 @@ def build_escalations(call_df, docs_df):
                 "invoice_status": row.get("Invoice_Status", "Not Received") or "Not Received",
                 "number_plate_status": row.get("Number_Plate_Status", "Not Received") or "Not Received",
                 "insurance_status": row.get("Insurance_Status", "Not Received") or "Not Received",
+                "slack_ts": row.get("Slack_Message_Ts", "") or "",
             })
     return escalations
 
@@ -599,7 +691,9 @@ def render_call_detail(item, sheet, df, unique_key):
                 dom_id = DOM_SLACK_ID.get(item["dom"])
                 dom_mention = ("<@" + dom_id + "> ") if dom_id else ""
                 msg = dom_mention + "🚨 *Case Escalated* — Onboarding Call (" + item["stage_label"] + ")\nDriver: " + str(item["driver_name"]) + " (" + str(item["driver_id"]) + ")\nContact: " + str(item["contact_number"]) + "\nUSC: " + fmt_val(item["usc_name"]) + "\nDOM: " + item["dom"] + "\nIssue: " + notes
-                sent, err = send_slack_alert(msg)
+                sent, ts, err = send_slack_message(msg, driver_id=item["driver_id"], source="Onboarding Call", include_button=True)
+                if sent and ts:
+                    save_updates(sheet, df, item["sheet_row"], {"Slack_Message_Ts": ts})
                 st.session_state["last_slack_result"] = (sent, err, item["driver_name"])
                 st.rerun()
 
@@ -751,7 +845,9 @@ def render_docs_detail(item, sheet, df, unique_key):
                 "Not Received: " + missing_text
                 + issue_line
             )
-            sent, err = send_slack_alert(msg)
+            sent, ts, err = send_slack_message(msg, driver_id=item["driver_id"], source="Docs Tracker", include_button=True)
+            if sent and ts:
+                save_updates(sheet, df, item["sheet_row"], {"Slack_Message_Ts": ts})
             st.session_state["last_slack_result"] = (sent, err, item["driver_name"])
             st.rerun()
 
@@ -841,7 +937,11 @@ def render_escalations_panel(call_sheet, call_df, docs_sheet, docs_df):
             resolve_msg = "✅ *Case Resolved* — " + e["source"] + "\nDriver: " + str(e["driver_name"]) + " (" + str(e["driver_id"]) + ")\nDOM: " + e["dom"]
             if resolution_note and resolution_note.strip():
                 resolve_msg += "\nResolution: " + resolution_note
-            sent, err = send_slack_alert(resolve_msg)
+            thread_ts = e.get("slack_ts") or None
+            if thread_ts:
+                sent, _, err = send_slack_message(resolve_msg, thread_ts=thread_ts)
+            else:
+                sent, err = send_slack_alert(resolve_msg)
             st.session_state["last_slack_result"] = (sent, err, e["driver_name"] + " (resolved)")
             st.rerun()
         st.write("")
@@ -952,6 +1052,24 @@ def main():
             st.rerun()
 
     if view == "📞 Onboarding Call Tracker":
+        with st.expander("✏️ Search & edit any record (past calls, wrong result, callback later, etc.)"):
+            edit_search = st.text_input("🔍 Search by driver name or ID", key="edit_search_call", placeholder="Type a name or Driver ID...")
+            if edit_search and edit_search.strip():
+                term = edit_search.strip().lower()
+                all_records = build_call_all_records(call_df)
+                matches = [r for r in all_records if term in str(r["driver_name"]).lower() or term in str(r["driver_id"]).lower()]
+                if not matches:
+                    st.warning("No matching records found.")
+                else:
+                    labels = [
+                        r["driver_name"] + " — " + r["stage_label"] + " (" + str(r["driver_id"]) + ") — currently: " + r["current_status"]
+                        for r in matches
+                    ]
+                    chosen_idx = st.selectbox("Select the exact record to edit", range(len(matches)), format_func=lambda i: labels[i], key="edit_pick_call")
+                    chosen = matches[chosen_idx]
+                    edit_key = "edit_call_" + str(chosen["sheet_row"]) + "_" + str(chosen["call_num"])
+                    render_call_detail(chosen, call_sheet, call_df, edit_key)
+
         render_generic_tab(call_due, call_sheet, call_df, "call", render_call_detail)
     elif view == "📄 Documentation Tracker":
         render_generic_tab(docs_due, docs_sheet, docs_df, "docs", render_docs_detail)
@@ -969,4 +1087,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
