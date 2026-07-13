@@ -52,6 +52,8 @@ DOM_MAP = {
     "mohd shadab": "Aman",
     "shadab": "Aman",
     "shail mishra": "Aman",
+    "shail kumar mishra": "Aman",
+    "mishra": "Aman",
     "sanjul": "Aman",
     "vinay": "Aman",
     "salman": "Aman",
@@ -223,12 +225,12 @@ def get_docs_sheet():
     return spreadsheet.worksheet(DOCS_SHEET_TAB)
 
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=180)
 def load_call_data(_sheet):
     return pd.DataFrame(_sheet.get_all_records())
 
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=180)
 def load_docs_data(_sheet):
     return pd.DataFrame(_sheet.get_all_records())
 
@@ -278,6 +280,8 @@ def build_call_due_list(df):
         base["dfe_status"] = row.get("DFE_Fees_Asked", "Not Checked") or "Not Checked"
         base["dfe_amount"] = row.get("DFE_Fee_Amount", "")
         base["call_result"] = row.get("Call_Outcome_Detail", "")
+        base["autopay_status"] = row.get("Autopay_Mandate_Status", "")
+        base["emi_due_date"] = row.get("EMI_Due_Date", "")
 
         # Call 1 (D+1)
         due_date_1 = parse_date(row.get("Call_Due_Date"))
@@ -382,7 +386,12 @@ def build_docs_due_list(df):
             item["total_signup_amount"] = row.get("Total_Signup_Amount")
             item["amount_paid"] = row.get("Amount_Paid")
             item["plan_amount"] = row.get("Plan_Amount")
+            item["autopay_status"] = row.get("Autopay_Mandate_Status", "")
+            item["emi_due_date"] = row.get("EMI_Due_Date", "")
             item["current_notes"] = row.get("Docs_Notes", "")
+            item["invoice_status"] = row.get("Invoice_Status", "Not Collected") or "Not Collected"
+            item["number_plate_status"] = row.get("Number_Plate_Status", "Not Collected") or "Not Collected"
+            item["insurance_status"] = row.get("Insurance_Status", "Not Collected") or "Not Collected"
             item["script"] = DOCS_SCRIPT.format(name=row.get("Driver_Name"))
             due.append(item)
     return due
@@ -415,6 +424,9 @@ def build_escalations(call_df, docs_df):
                 "dom": get_dom(row.get("USC_Name")),
                 "notes": row.get("Docs_Notes", ""),
                 "status_col": "Escalation_Status",
+                "invoice_status": row.get("Invoice_Status", "Not Collected") or "Not Collected",
+                "number_plate_status": row.get("Number_Plate_Status", "Not Collected") or "Not Collected",
+                "insurance_status": row.get("Insurance_Status", "Not Collected") or "Not Collected",
             })
     return escalations
 
@@ -457,10 +469,18 @@ def render_call_detail(item, sheet, df, unique_key):
         with c2:
             vehicle_html = "<div class='detail-label'>Vehicle</div><div class='detail-value'>" + fmt_val(item['vehicle_model']) + "</div>"
             st.markdown(vehicle_html, unsafe_allow_html=True)
-            price_html = "<div class='detail-label'>Vehicle Price / Amount Paid</div><div class='detail-value'>" + fmt_money(item['total_signup_amount']) + " / " + fmt_money(item['amount_paid']) + "</div>"
+            price_html = "<div class='detail-label'>Signup Amount / Signup Amount Paid</div><div class='detail-value'>" + fmt_money(item['total_signup_amount']) + " / " + fmt_money(item['amount_paid']) + "</div>"
             st.markdown(price_html, unsafe_allow_html=True)
             plan_html = "<div class='detail-label'>Plan Amount</div><div class='detail-value'>" + fmt_money(item['plan_amount']) + "</div>"
             st.markdown(plan_html, unsafe_allow_html=True)
+
+        c3, c4 = st.columns(2)
+        with c3:
+            autopay_html = "<div class='detail-label'>Autopay Mandate</div><div class='detail-value'>" + fmt_val(item.get('autopay_status')) + "</div>"
+            st.markdown(autopay_html, unsafe_allow_html=True)
+        with c4:
+            emi_html = "<div class='detail-label'>EMI Due Date</div><div class='detail-value'>" + fmt_val(item.get('emi_due_date')) + "</div>"
+            st.markdown(emi_html, unsafe_allow_html=True)
 
         if item["is_followup"]:
             st.caption("⚠️ This is already a follow-up call (one repeat used).")
@@ -547,6 +567,13 @@ def render_call_detail(item, sheet, df, unique_key):
             st.caption("This driver has already had at least one follow-up before, on this stage.")
 
 
+DOC_ITEMS = [
+    ("invoice_status", "Invoice_Status", "🧾 Invoice"),
+    ("number_plate_status", "Number_Plate_Status", "🔢 Number Plate"),
+    ("insurance_status", "Insurance_Status", "🛡️ Insurance"),
+]
+
+
 def render_docs_detail(item, sheet, df, unique_key):
     detail_box = st.container(border=True)
     with detail_box:
@@ -570,10 +597,18 @@ def render_docs_detail(item, sheet, df, unique_key):
         with c2:
             vehicle_html = "<div class='detail-label'>Vehicle</div><div class='detail-value'>" + fmt_val(item['vehicle_model']) + "</div>"
             st.markdown(vehicle_html, unsafe_allow_html=True)
-            price_html = "<div class='detail-label'>Vehicle Price / Amount Paid</div><div class='detail-value'>" + fmt_money(item['total_signup_amount']) + " / " + fmt_money(item['amount_paid']) + "</div>"
+            price_html = "<div class='detail-label'>Signup Amount / Signup Amount Paid</div><div class='detail-value'>" + fmt_money(item['total_signup_amount']) + " / " + fmt_money(item['amount_paid']) + "</div>"
             st.markdown(price_html, unsafe_allow_html=True)
             plan_html = "<div class='detail-label'>Plan Amount (EMI/Subscription)</div><div class='detail-value'>" + fmt_money(item['plan_amount']) + "</div>"
             st.markdown(plan_html, unsafe_allow_html=True)
+
+        c3, c4 = st.columns(2)
+        with c3:
+            autopay_html = "<div class='detail-label'>Autopay Mandate</div><div class='detail-value'>" + fmt_val(item.get('autopay_status')) + "</div>"
+            st.markdown(autopay_html, unsafe_allow_html=True)
+        with c4:
+            emi_html = "<div class='detail-label'>EMI Due Date</div><div class='detail-value'>" + fmt_val(item.get('emi_due_date')) + "</div>"
+            st.markdown(emi_html, unsafe_allow_html=True)
 
     st.write("")
     st.info("**Script:** " + item["script"])
@@ -582,32 +617,74 @@ def render_docs_detail(item, sheet, df, unique_key):
 
     notes = st.text_input("Call notes", value=item["current_notes"], key="docsnotes_" + unique_key)
 
-    btn1, btn2, btn3 = st.columns(3)
-    with btn1:
-        if st.button("✅ Documents Received", key="docsdone_" + unique_key, type="primary", use_container_width=True):
-            updates = {"Docs_Notes": notes, "Docs_Status": "Documents Received", "Escalation_Status": ""}
+    st.write("")
+    st.markdown("**Document Checklist** — mark each one individually:")
+
+    doc_cols = st.columns(3)
+    current_doc_values = {}
+    for idx, (item_key, sheet_col, label) in enumerate(DOC_ITEMS):
+        with doc_cols[idx]:
+            current_status = item.get(item_key, "Not Collected")
+            pill_color = "🟢" if current_status == "Collected" else "🔴"
+            st.markdown("**" + label + "**  " + pill_color + " " + current_status)
+            bcol1, bcol2 = st.columns(2)
+            with bcol1:
+                if st.button("✅ Collected", key="doc_ok_" + item_key + "_" + unique_key, use_container_width=True):
+                    save_updates(sheet, df, item["sheet_row"], {sheet_col: "Collected"})
+                    load_docs_data.clear()
+                    st.toast(label + " marked collected!", icon="✅")
+                    st.rerun()
+            with bcol2:
+                if st.button("❌ Not Collected", key="doc_no_" + item_key + "_" + unique_key, use_container_width=True):
+                    save_updates(sheet, df, item["sheet_row"], {sheet_col: "Not Collected"})
+                    load_docs_data.clear()
+                    st.toast(label + " marked not collected.", icon="❌")
+                    st.rerun()
+            current_doc_values[label] = current_status
+
+    st.write("")
+    all_collected = all(v == "Collected" for v in current_doc_values.values())
+
+    bfoot1, bfoot2 = st.columns(2)
+    with bfoot1:
+        if st.button("✅ Mark All Documents Received", key="docsdone_" + unique_key, type="primary", use_container_width=True):
+            updates = {
+                "Docs_Notes": notes,
+                "Docs_Status": "Documents Received",
+                "Escalation_Status": "",
+                "Invoice_Status": "Collected",
+                "Number_Plate_Status": "Collected",
+                "Insurance_Status": "Collected",
+            }
             save_updates(sheet, df, item["sheet_row"], updates)
             load_docs_data.clear()
-            st.toast("Marked as received!", icon="✅")
+            st.toast("All documents marked received!", icon="✅")
             st.rerun()
-    with btn2:
-        if st.button("❌ Not Received", key="docsnotreceived_" + unique_key, use_container_width=True):
-            updates = {"Docs_Notes": notes, "Docs_Status": "Not Received"}
-            save_updates(sheet, df, item["sheet_row"], updates)
-            load_docs_data.clear()
-            st.toast("Marked as not received.", icon="❌")
-            st.rerun()
-    with btn3:
+    with bfoot2:
         if st.button("🚨 Escalate to DOM", key="docsescalate_" + unique_key, use_container_width=True):
             if not notes or not notes.strip():
                 st.warning("Please add notes before escalating.")
             else:
-                updates = {"Docs_Notes": notes, "Docs_Status": "Escalated to DOM", "Escalation_Status": "Open"}
+                docs_status = "Documents Received" if all_collected else "Not Received"
+                updates = {"Docs_Notes": notes, "Docs_Status": docs_status, "Escalation_Status": "Open"}
                 save_updates(sheet, df, item["sheet_row"], updates)
                 load_docs_data.clear()
                 dom_id = DOM_SLACK_ID.get(item["dom"])
                 dom_mention = ("<@" + dom_id + "> ") if dom_id else ""
-                msg = dom_mention + "🚨 *Case Escalated* — Documentation\nDriver: " + str(item["driver_name"]) + " (" + str(item["driver_id"]) + ")\nContact: " + str(item["contact_number"]) + "\nUSC: " + fmt_val(item["usc_name"]) + "\nDOM: " + item["dom"] + "\nIssue: " + notes
+                missing = [label for label, v in current_doc_values.items() if v != "Collected"]
+                missing_text = ", ".join(missing) if missing else "None — all documents collected"
+                msg = (
+                    dom_mention + "🚨 *Case Escalated* — Documentation\n"
+                    "Driver: " + str(item["driver_name"]) + " (" + str(item["driver_id"]) + ")\n"
+                    "Contact: " + str(item["contact_number"]) + "\n"
+                    "USC: " + fmt_val(item["usc_name"]) + "\n"
+                    "DOM: " + item["dom"] + "\n"
+                    "Invoice: " + current_doc_values.get("🧾 Invoice", "Not Collected") + "\n"
+                    "Number Plate: " + current_doc_values.get("🔢 Number Plate", "Not Collected") + "\n"
+                    "Insurance: " + current_doc_values.get("🛡️ Insurance", "Not Collected") + "\n"
+                    "Not Collected: " + missing_text + "\n"
+                    "Issue: " + notes
+                )
                 sent, err = send_slack_alert(msg)
                 st.session_state["last_slack_result"] = (sent, err, item["driver_name"])
                 st.rerun()
@@ -672,7 +749,14 @@ def render_escalations_panel(call_sheet, call_df, docs_sheet, docs_df):
     filtered = escalations if chosen_dom == "All" else [e for e in escalations if e["dom"] == chosen_dom]
 
     for e in filtered:
-        card_html = "<div class='escalation-card'><b>" + str(e["driver_name"]) + "</b> (" + str(e["driver_id"]) + ") &nbsp;|&nbsp; " + e["source"] + " &nbsp;|&nbsp; USC: " + fmt_val(e["usc_name"]) + " &nbsp;|&nbsp; DOM: <b>" + e["dom"] + "</b><br>Contact: " + str(e["contact_number"]) + "<br>Notes: " + str(e["notes"]) + "</div>"
+        docs_line = ""
+        if e["source"] == "Docs Tracker":
+            docs_line = (
+                "<br>🧾 Invoice: <b>" + e.get("invoice_status", "Not Collected") + "</b>"
+                " &nbsp;|&nbsp; 🔢 Number Plate: <b>" + e.get("number_plate_status", "Not Collected") + "</b>"
+                " &nbsp;|&nbsp; 🛡️ Insurance: <b>" + e.get("insurance_status", "Not Collected") + "</b>"
+            )
+        card_html = "<div class='escalation-card'><b>" + str(e["driver_name"]) + "</b> (" + str(e["driver_id"]) + ") &nbsp;|&nbsp; " + e["source"] + " &nbsp;|&nbsp; USC: " + fmt_val(e["usc_name"]) + " &nbsp;|&nbsp; DOM: <b>" + e["dom"] + "</b><br>Contact: " + str(e["contact_number"]) + docs_line + "<br>Notes: " + str(e["notes"]) + "</div>"
         st.markdown(card_html, unsafe_allow_html=True)
 
         resolution_key = "resolution_note_" + e["source"] + "_" + str(e["sheet_row"])
