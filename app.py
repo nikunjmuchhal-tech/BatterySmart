@@ -8,21 +8,21 @@ def today_ist():
     return datetime.now(IST).date()
 import gspread
 from google.oauth2.service_account import Credentials
-
+ 
 st.set_page_config(page_title="Battery Smart - Onboarding Calls", layout="wide", initial_sidebar_state="expanded")
-
+ 
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 CALL_SHEET_TAB = "Call Logs"
 DOCS_SHEET_TAB = "Docs Tracker"
-
+ 
 CALL_SCRIPT = "Hello {name}, welcome to Battery Smart! This is a courtesy call to confirm you're settling in well. Any questions about onboarding, your plan, or the app?"
 CALL_2_SCRIPT = "Hello {name}, following up from Battery Smart — how has your experience been since you started? Any issues with the vehicle, battery, or swap process?"
 DOCS_SCRIPT = "Hello {name}, this is Battery Smart calling regarding your vehicle documents. Have you received your RC and other vehicle documents yet?"
-
+ 
 CALL_STATUS_OPTIONS = ["Pending", "Call Attempted", "Escalated to DOM", "Follow-up Needed"]
 DOCS_STATUS_OPTIONS = ["Pending", "Documents Received", "Not Received", "Escalated to DOM"]
 DFE_OPTIONS = ["Not Checked", "Yes", "No"]
-
+ 
 STATUS_DOT = {
     "Pending": "⚪",
     "Call Attempted": "🟢",
@@ -30,12 +30,12 @@ STATUS_DOT = {
     "Follow-up Needed": "🔵",
     "Documents Received": "🟢",
 }
-
+ 
 BRAND_GREEN = "#00C389"
 BRAND_NAVY = "#151272"
-
+ 
 LOGO_SVG = "<svg width='46' height='46' viewBox='0 0 300 470' style='vertical-align:middle; margin-right:12px;'><rect x='95' y='0' width='110' height='45' rx='8' fill='#00C389'/><path d='M20 65 C5 65 0 80 10 92 L140 240 L10 388 C0 400 5 415 20 415 L280 415 C295 415 300 400 290 388 L160 240 L290 92 C300 80 295 65 280 65 Z M100 130 L200 130 L150 190 Z M100 350 L200 350 L150 290 Z' fill='#00C389'/></svg>"
-
+ 
 METRIC_ICONS = {
     "Total Due": "▣",
     "Completed": "✓",
@@ -44,7 +44,7 @@ METRIC_ICONS = {
     "Pending": "◷",
     "Docs Received": "✓",
 }
-
+ 
 # DOM lookup, derived from the USC-to-DOM assignment log provided.
 # Keyed by lowercased USC first name. Update this dict if the mapping changes.
 DOM_MAP = {
@@ -69,15 +69,15 @@ DOM_MAP = {
     "mohd aarif": "Sajid",
     "aarif": "Sajid",
 }
-
+ 
 DOM_SLACK_ID = {
     "Aman": "U09EHLRG3J7",
     "Sajid": "U0AMA1TAJ2Y",
 }
-
+ 
 CALL_RESULT_OPTIONS = ["Connected", "Not Connected", "Incoming Not Available", "FollowUp Scheduled"]
-
-
+ 
+ 
 def get_dom(usc_name):
     if not usc_name:
         return "Unassigned"
@@ -85,23 +85,23 @@ def get_dom(usc_name):
     full = " ".join(full.split())
     if full in DOM_MAP:
         return DOM_MAP[full]
-
+ 
     words = full.split(" ")
-
+ 
     # Check consecutive two-word combinations (handles "shail mishra", "mohd shadab", etc.)
     for i in range(len(words) - 1):
         pair = words[i] + " " + words[i + 1]
         if pair in DOM_MAP:
             return DOM_MAP[pair]
-
+ 
     # Check each individual word (handles "Mohd Salman" -> "salman", "Sorabh Kumar" -> "sorabh")
     for word in words:
         if word in DOM_MAP:
             return DOM_MAP[word]
-
+ 
     return "Unassigned"
-
-
+ 
+ 
 def send_slack_alert(message):
     webhook = st.secrets.get("slack_webhook_url", "")
     if not webhook:
@@ -113,8 +113,8 @@ def send_slack_alert(message):
         return False, "Slack responded with status " + str(resp.status_code) + ": " + resp.text
     except Exception as e:
         return False, "Request failed: " + str(e)
-
-
+ 
+ 
 st.markdown(
     "<style>"
     "[data-testid='stAppViewContainer'] { background: linear-gradient(160deg, #f0fffa 0%, #ffffff 30%, #f1f2ff 100%); }"
@@ -200,41 +200,49 @@ st.markdown(
     "[data-testid='stDataFrame'] [role='columnheader'] * { color: " + BRAND_GREEN + " !important; }"
     "[data-testid='stHeadingWithActionElements'] h1, [data-testid='stHeadingWithActionElements'] h2, [data-testid='stHeadingWithActionElements'] h3 { color:" + BRAND_NAVY + " !important; }"
     ".detail-name, .detail-value, .detail-label, .detail-sub { color-scheme: light; }"
+    "[class*='st-key-docok_wrap_'] button { background-color: #f0fdf4 !important; border: 1.5px solid #16a34a !important; color: #16a34a !important; font-weight: 700 !important; }"
+    "[class*='st-key-docok_wrap_'] button p { color: #16a34a !important; font-weight: 700 !important; }"
+    "[class*='st-key-docok_wrap_'] button:hover { background-color: #16a34a !important; }"
+    "[class*='st-key-docok_wrap_'] button:hover p { color: #ffffff !important; }"
+    "[class*='st-key-docno_wrap_'] button { background-color: #fef2f2 !important; border: 1.5px solid #dc2626 !important; color: #dc2626 !important; font-weight: 700 !important; }"
+    "[class*='st-key-docno_wrap_'] button p { color: #dc2626 !important; font-weight: 700 !important; }"
+    "[class*='st-key-docno_wrap_'] button:hover { background-color: #dc2626 !important; }"
+    "[class*='st-key-docno_wrap_'] button:hover p { color: #ffffff !important; }"
     "</style>",
     unsafe_allow_html=True,
 )
-
-
+ 
+ 
 @st.cache_resource
 def get_client():
     creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=SCOPES)
     return gspread.authorize(creds)
-
-
+ 
+ 
 @st.cache_resource
 def get_call_sheet():
     client = get_client()
     spreadsheet = client.open_by_key(st.secrets["spreadsheet_id"])
     return spreadsheet.worksheet(CALL_SHEET_TAB)
-
-
+ 
+ 
 @st.cache_resource
 def get_docs_sheet():
     client = get_client()
     spreadsheet = client.open_by_key(st.secrets["spreadsheet_id"])
     return spreadsheet.worksheet(DOCS_SHEET_TAB)
-
-
+ 
+ 
 @st.cache_data(ttl=180)
 def load_call_data(_sheet):
     return pd.DataFrame(_sheet.get_all_records())
-
-
+ 
+ 
 @st.cache_data(ttl=180)
 def load_docs_data(_sheet):
     return pd.DataFrame(_sheet.get_all_records())
-
-
+ 
+ 
 def parse_date(val):
     if not val:
         return None
@@ -242,22 +250,22 @@ def parse_date(val):
         return pd.to_datetime(val, dayfirst=True).date()
     except Exception:
         return None
-
-
+ 
+ 
 def fmt_val(val):
     text = str(val).strip() if val is not None else ""
     if text == "" or text.lower() == "nan":
         return "—"
     return text
-
-
+ 
+ 
 def fmt_money(val):
     text = str(val).strip() if val is not None else ""
     if text == "" or text.lower() == "nan":
         return "—"
     return "Rs " + text
-
-
+ 
+ 
 def build_call_due_list(df):
     today = today_ist()
     due = []
@@ -282,7 +290,7 @@ def build_call_due_list(df):
         base["call_result"] = row.get("Call_Outcome_Detail", "")
         base["autopay_status"] = row.get("Autopay_Mandate_Status", "")
         base["emi_due_date"] = row.get("EMI_Due_Date", "")
-
+ 
         # Call 1 (D+1)
         due_date_1 = parse_date(row.get("Call_Due_Date"))
         status_1 = row.get("Call_Status", "Pending") or "Pending"
@@ -299,7 +307,7 @@ def build_call_due_list(df):
             item["show_dfe"] = True
             item["script"] = CALL_SCRIPT.format(name=row.get("Driver_Name"))
             due.append(item)
-
+ 
         # Call 2 (D+2)
         due_date_2 = parse_date(row.get("Call_2_Due_Date"))
         status_2 = row.get("Call_2_Status", "Pending") or "Pending"
@@ -316,10 +324,10 @@ def build_call_due_list(df):
             item["show_dfe"] = False
             item["script"] = CALL_2_SCRIPT.format(name=row.get("Driver_Name"))
             due.append(item)
-
+ 
     return due
-
-
+ 
+ 
 def build_call_today_all(df):
     today = today_ist()
     rows = []
@@ -345,8 +353,8 @@ def build_call_today_all(df):
                 "status": row.get("Call_2_Status", "Pending") or "Pending",
             })
     return rows
-
-
+ 
+ 
 def build_docs_today_all(df):
     today = today_ist()
     rows = []
@@ -362,8 +370,8 @@ def build_docs_today_all(df):
                 "status": row.get("Docs_Status", "Pending") or "Pending",
             })
     return rows
-
-
+ 
+ 
 def build_docs_due_list(df):
     today = today_ist()
     due = []
@@ -395,8 +403,8 @@ def build_docs_due_list(df):
             item["script"] = DOCS_SCRIPT.format(name=row.get("Driver_Name"))
             due.append(item)
     return due
-
-
+ 
+ 
 def build_escalations(call_df, docs_df):
     escalations = []
     for i, row in call_df.iterrows():
@@ -429,8 +437,8 @@ def build_escalations(call_df, docs_df):
                 "insurance_status": row.get("Insurance_Status", "Not Received") or "Not Received",
             })
     return escalations
-
-
+ 
+ 
 def save_updates(sheet, df, sheet_row, updates):
     header = df.columns.tolist()
     batch = []
@@ -442,14 +450,14 @@ def save_updates(sheet, df, sheet_row, updates):
         batch.append({"range": cell_range, "values": [[updates[col_name]]]})
     if batch:
         sheet.batch_update(batch)
-
-
+ 
+ 
 def render_call_detail(item, sheet, df, unique_key):
     detail_box = st.container(border=True)
     with detail_box:
         name_html = "<div class='detail-name'>" + str(item['driver_name']) + "</div><div class='detail-sub'>Driver ID: " + str(item['driver_id']) + " &nbsp;|&nbsp; USC: " + fmt_val(item['usc_name']) + " &nbsp;|&nbsp; DOM: " + item['dom'] + " &nbsp;|&nbsp; Stage: <b>" + item["stage_label"] + "</b></div>"
         st.markdown(name_html, unsafe_allow_html=True)
-
+ 
         tel_number = str(item['contact_number']).strip()
         if tel_number and tel_number.lower() != "nan":
             call_html = "<a class='call-link' href='tel:" + tel_number + "'>📱 Call " + tel_number + "</a>"
@@ -457,7 +465,7 @@ def render_call_detail(item, sheet, df, unique_key):
         else:
             st.warning("No contact number on file for this driver.")
         st.write("")
-
+ 
         c1, c2 = st.columns(2)
         with c1:
             zone_html = "<div class='detail-label'>Zone</div><div class='detail-value'>" + fmt_val(item['zone']) + "</div>"
@@ -473,7 +481,7 @@ def render_call_detail(item, sheet, df, unique_key):
             st.markdown(price_html, unsafe_allow_html=True)
             plan_html = "<div class='detail-label'>Plan Amount</div><div class='detail-value'>" + fmt_money(item['plan_amount']) + "</div>"
             st.markdown(plan_html, unsafe_allow_html=True)
-
+ 
         c3, c4 = st.columns(2)
         with c3:
             autopay_html = "<div class='detail-label'>Autopay Mandate</div><div class='detail-value'>" + fmt_val(item.get('autopay_status')) + "</div>"
@@ -481,24 +489,24 @@ def render_call_detail(item, sheet, df, unique_key):
         with c4:
             emi_html = "<div class='detail-label'>EMI Due Date</div><div class='detail-value'>" + fmt_val(item.get('emi_due_date')) + "</div>"
             st.markdown(emi_html, unsafe_allow_html=True)
-
+ 
         if item["is_followup"]:
             st.caption("⚠️ This is already a follow-up call (one repeat used).")
-
+ 
     st.write("")
     st.info("**Script:** " + item["script"])
     if item["current_notes"]:
         st.caption("Previous notes: " + str(item["current_notes"]))
-
+ 
     result_key = "result_" + unique_key
     result_default_idx = 0
     if item.get("call_result") in CALL_RESULT_OPTIONS:
         result_default_idx = CALL_RESULT_OPTIONS.index(item["call_result"])
     call_result = st.selectbox("Call Result", CALL_RESULT_OPTIONS, index=result_default_idx, key=result_key)
-
+ 
     notes_key = "notes_" + unique_key
     notes = st.text_input("Call notes", value=item["current_notes"], key=notes_key)
-
+ 
     dfe_value = None
     dfe_amount_value = ""
     if item["show_dfe"]:
@@ -508,15 +516,15 @@ def render_call_detail(item, sheet, df, unique_key):
             dfe_default_idx = DFE_OPTIONS.index(item["dfe_status"])
         dfe_col1, dfe_col2 = st.columns(2)
         with dfe_col1:
-            dfe_value = st.selectbox("DFE/dealer asked for fees?", DFE_OPTIONS, index=dfe_default_idx, key=dfe_key)
+            dfe_value = st.selectbox("Did DFE ask for any fee?", DFE_OPTIONS, index=dfe_default_idx, key=dfe_key)
         if dfe_value == "Yes":
             with dfe_col2:
                 existing_amount = str(item["dfe_amount"]) if item["dfe_amount"] else ""
                 dfe_amount_value = st.text_input("Fee amount asked (Rs)", value=existing_amount, key="dfeamt_" + unique_key)
-
+ 
     st.write("")
     btn1, btn2, btn3 = st.columns(3)
-
+ 
     base_updates = {item["notes_col"]: notes, "Call_Outcome_Detail": call_result}
     if dfe_value is not None:
         base_updates["DFE_Fees_Asked"] = dfe_value
@@ -524,7 +532,7 @@ def render_call_detail(item, sheet, df, unique_key):
             base_updates["DFE_Fee_Amount"] = dfe_amount_value
         else:
             base_updates["DFE_Fee_Amount"] = ""
-
+ 
     with btn1:
         if st.button("✅ Call Attempted", key="complete_" + unique_key, type="primary", use_container_width=True):
             updates = dict(base_updates)
@@ -534,7 +542,7 @@ def render_call_detail(item, sheet, df, unique_key):
             load_call_data.clear()
             st.toast("Marked as attempted!", icon="✅")
             st.rerun()
-
+ 
     with btn2:
         if st.button("🚨 Escalate to DOM", key="escalate_" + unique_key, use_container_width=True):
             if not notes or not notes.strip():
@@ -551,7 +559,7 @@ def render_call_detail(item, sheet, df, unique_key):
                 sent, err = send_slack_alert(msg)
                 st.session_state["last_slack_result"] = (sent, err, item["driver_name"])
                 st.rerun()
-
+ 
     with btn3:
         if st.button("🔁 Follow-up Tomorrow", key="followup_" + unique_key, use_container_width=True):
             updates = dict(base_updates)
@@ -565,27 +573,27 @@ def render_call_detail(item, sheet, df, unique_key):
             st.rerun()
         if item["is_followup"]:
             st.caption("This driver has already had at least one follow-up before, on this stage.")
-
-
+ 
+ 
 DOC_ITEMS = [
     ("invoice_status", "Invoice_Status", "🧾 Invoice"),
     ("number_plate_status", "Number_Plate_Status", "🔢 Number Plate"),
     ("insurance_status", "Insurance_Status", "🛡️ Insurance"),
 ]
-
-
+ 
+ 
 def render_docs_detail(item, sheet, df, unique_key):
     detail_box = st.container(border=True)
     with detail_box:
         name_html = "<div class='detail-name'>" + str(item['driver_name']) + "</div><div class='detail-sub'>Driver ID: " + str(item['driver_id']) + " &nbsp;|&nbsp; USC: " + fmt_val(item['usc_name']) + " &nbsp;|&nbsp; DOM: " + item['dom'] + "</div>"
         st.markdown(name_html, unsafe_allow_html=True)
-
+ 
         tel_number = str(item['contact_number']).strip()
         if tel_number and tel_number.lower() != "nan":
             call_html = "<a class='call-link' href='tel:" + tel_number + "'>📱 Call " + tel_number + "</a>"
             st.markdown(call_html, unsafe_allow_html=True)
         st.write("")
-
+ 
         c1, c2 = st.columns(2)
         with c1:
             zone_html = "<div class='detail-label'>Zone</div><div class='detail-value'>" + fmt_val(item['zone']) + "</div>"
@@ -601,7 +609,7 @@ def render_docs_detail(item, sheet, df, unique_key):
             st.markdown(price_html, unsafe_allow_html=True)
             plan_html = "<div class='detail-label'>Plan Amount (EMI/Subscription)</div><div class='detail-value'>" + fmt_money(item['plan_amount']) + "</div>"
             st.markdown(plan_html, unsafe_allow_html=True)
-
+ 
         c3, c4 = st.columns(2)
         with c3:
             autopay_html = "<div class='detail-label'>Autopay Mandate</div><div class='detail-value'>" + fmt_val(item.get('autopay_status')) + "</div>"
@@ -609,17 +617,17 @@ def render_docs_detail(item, sheet, df, unique_key):
         with c4:
             emi_html = "<div class='detail-label'>EMI Due Date</div><div class='detail-value'>" + fmt_val(item.get('emi_due_date')) + "</div>"
             st.markdown(emi_html, unsafe_allow_html=True)
-
+ 
     st.write("")
     st.info("**Script:** " + item["script"])
     if item["current_notes"]:
         st.caption("Previous notes: " + str(item["current_notes"]))
-
+ 
     notes = st.text_input("Call notes", value=item["current_notes"], key="docsnotes_" + unique_key)
-
+ 
     st.write("")
     st.markdown("**Document Checklist**")
-
+ 
     checklist_box = st.container(border=True)
     current_doc_values = {}
     with checklist_box:
@@ -632,11 +640,11 @@ def render_docs_detail(item, sheet, df, unique_key):
             st.markdown("<span class='detail-label'>&nbsp;</span>", unsafe_allow_html=True)
         with header_c4:
             st.markdown("<span class='detail-label'>&nbsp;</span>", unsafe_allow_html=True)
-
+ 
         for item_key, sheet_col, label in DOC_ITEMS:
             current_status = item.get(item_key, "Not Received")
             current_doc_values[label] = current_status
-
+ 
             row_c1, row_c2, row_c3, row_c4 = st.columns([1.8, 1.3, 1.1, 1.1])
             with row_c1:
                 st.markdown("**" + label + "**")
@@ -646,21 +654,23 @@ def render_docs_detail(item, sheet, df, unique_key):
                 else:
                     st.markdown("<span class='status-pill not-received'>🔴 Not Received</span>", unsafe_allow_html=True)
             with row_c3:
-                if st.button("✅ Received", key="doc_ok_" + item_key + "_" + unique_key, use_container_width=True):
-                    save_updates(sheet, df, item["sheet_row"], {sheet_col: "Received"})
-                    load_docs_data.clear()
-                    st.toast(label + " marked received!", icon="✅")
-                    st.rerun()
+                with st.container(key="docok_wrap_" + item_key + "_" + unique_key):
+                    if st.button("✅ Received", key="doc_ok_" + item_key + "_" + unique_key, use_container_width=True):
+                        save_updates(sheet, df, item["sheet_row"], {sheet_col: "Received"})
+                        load_docs_data.clear()
+                        st.toast(label + " marked received!", icon="✅")
+                        st.rerun()
             with row_c4:
-                if st.button("❌ Not Received", key="doc_no_" + item_key + "_" + unique_key, use_container_width=True):
-                    save_updates(sheet, df, item["sheet_row"], {sheet_col: "Not Received"})
-                    load_docs_data.clear()
-                    st.toast(label + " marked not received.", icon="❌")
-                    st.rerun()
-
+                with st.container(key="docno_wrap_" + item_key + "_" + unique_key):
+                    if st.button("❌ Not Received", key="doc_no_" + item_key + "_" + unique_key, use_container_width=True):
+                        save_updates(sheet, df, item["sheet_row"], {sheet_col: "Not Received"})
+                        load_docs_data.clear()
+                        st.toast(label + " marked not received.", icon="❌")
+                        st.rerun()
+ 
     st.write("")
     all_collected = all(v == "Received" for v in current_doc_values.values())
-
+ 
     bfoot1, bfoot2 = st.columns(2)
     with bfoot1:
         if st.button("✅ Mark All Documents Received", key="docsdone_" + unique_key, type="primary", use_container_width=True):
@@ -704,31 +714,31 @@ def render_docs_detail(item, sheet, df, unique_key):
                 sent, err = send_slack_alert(msg)
                 st.session_state["last_slack_result"] = (sent, err, item["driver_name"])
                 st.rerun()
-
-
+ 
+ 
 def render_generic_tab(items, sheet, df, key_prefix, detail_fn):
     if not items:
         st.success("No calls due right now.")
         return
-
+ 
     selected_key = "selected_" + key_prefix
     search_key = "search_" + key_prefix
     if selected_key not in st.session_state:
         st.session_state[selected_key] = 0
-
+ 
     search_term = st.text_input("🔍 Search by name or ID", key=search_key, placeholder="Type to filter the list...")
     filtered = items
     if search_term:
         term = search_term.strip().lower()
         filtered = [it for it in items if term in str(it["driver_name"]).lower() or term in str(it["driver_id"]).lower()]
-
+ 
     if not filtered:
         st.warning("No matches for that search.")
         return
-
+ 
     if st.session_state[selected_key] >= len(filtered):
         st.session_state[selected_key] = 0
-
+ 
     list_col, detail_col = st.columns([1, 2])
     with list_col:
         for idx, item in enumerate(filtered):
@@ -738,32 +748,32 @@ def render_generic_tab(items, sheet, df, key_prefix, detail_fn):
             row_key = key_prefix + "_btn_" + str(item["sheet_row"]) + "_" + str(item.get("call_num", 0))
             if st.button(label, key=row_key, use_container_width=True, type=btn_type):
                 st.session_state[selected_key] = idx
-
+ 
     with detail_col:
         item = filtered[st.session_state[selected_key]]
         unique_key = key_prefix + "_" + str(item["sheet_row"]) + "_" + str(item.get("call_num", 0))
         detail_fn(item, sheet, df, unique_key)
-
-
+ 
+ 
 def render_metric(label, value):
     icon = METRIC_ICONS.get(label, "")
     icon_html = "<div style='font-size:1.4rem; color:" + BRAND_GREEN + "; font-weight:800;'>" + icon + "</div>"
     html = "<div class='metric-box'>" + icon_html + "<div class='metric-num'>" + str(value) + "</div><div class='metric-label'>" + label + "</div></div>"
     st.markdown(html, unsafe_allow_html=True)
-
-
+ 
+ 
 def render_escalations_panel(call_sheet, call_df, docs_sheet, docs_df):
     escalations = build_escalations(call_df, docs_df)
     st.subheader("🚨 Open Escalations (" + str(len(escalations)) + ")")
-
+ 
     if not escalations:
         st.success("No open escalations. Nice.")
         return
-
+ 
     dom_filter_options = ["All"] + sorted(set(e["dom"] for e in escalations))
     chosen_dom = st.selectbox("Filter by DOM", dom_filter_options, key="escalation_dom_filter")
     filtered = escalations if chosen_dom == "All" else [e for e in escalations if e["dom"] == chosen_dom]
-
+ 
     for e in filtered:
         docs_line = ""
         if e["source"] == "Docs Tracker":
@@ -774,10 +784,10 @@ def render_escalations_panel(call_sheet, call_df, docs_sheet, docs_df):
             )
         card_html = "<div class='escalation-card'><b>" + str(e["driver_name"]) + "</b> (" + str(e["driver_id"]) + ") &nbsp;|&nbsp; " + e["source"] + " &nbsp;|&nbsp; USC: " + fmt_val(e["usc_name"]) + " &nbsp;|&nbsp; DOM: <b>" + e["dom"] + "</b><br>Contact: " + str(e["contact_number"]) + docs_line + "<br>Notes: " + str(e["notes"]) + "</div>"
         st.markdown(card_html, unsafe_allow_html=True)
-
+ 
         resolution_key = "resolution_note_" + e["source"] + "_" + str(e["sheet_row"])
         resolution_note = st.text_input("Resolution notes (optional)", key=resolution_key, placeholder="What was done to fix this?")
-
+ 
         resolve_key = "resolve_" + e["source"] + "_" + str(e["sheet_row"])
         if st.button("Mark Resolved", key=resolve_key):
             target_sheet = call_sheet if e["source"] == "Onboarding Call" else docs_sheet
@@ -787,7 +797,7 @@ def render_escalations_panel(call_sheet, call_df, docs_sheet, docs_df):
                 load_call_data.clear()
             else:
                 load_docs_data.clear()
-
+ 
             resolve_msg = "✅ *Case Resolved* — " + e["source"] + "\nDriver: " + str(e["driver_name"]) + " (" + str(e["driver_id"]) + ")\nDOM: " + e["dom"]
             if resolution_note and resolution_note.strip():
                 resolve_msg += "\nResolution: " + resolution_note
@@ -795,8 +805,8 @@ def render_escalations_panel(call_sheet, call_df, docs_sheet, docs_df):
             st.session_state["last_slack_result"] = (sent, err, e["driver_name"] + " (resolved)")
             st.rerun()
         st.write("")
-
-
+ 
+ 
 def render_dashboard_stage(items, status_options):
     total = len(items)
     counts = {}
@@ -807,12 +817,12 @@ def render_dashboard_stage(items, status_options):
         if s not in counts:
             counts[s] = 0
         counts[s] += 1
-
+ 
     pending = counts.get("Pending", 0)
     attempted = counts.get("Call Attempted", 0) + counts.get("Documents Received", 0)
     escalated = counts.get("Escalated to DOM", 0)
     followup = counts.get("Follow-up Needed", 0)
-
+ 
     cols = st.columns(4)
     with cols[0]:
         render_metric("Total Due", total)
@@ -822,16 +832,16 @@ def render_dashboard_stage(items, status_options):
         render_metric("Completed", attempted)
     with cols[3]:
         render_metric("Escalated", escalated)
-
+ 
     if total == 0:
         st.caption("Nobody in this list today.")
         return
-
+ 
     st.write("")
     status_filter_options = ["All"] + sorted(set(item["status"] for item in items))
     chosen_status = st.selectbox("Filter by Call Status", status_filter_options, key="dash_status_filter_" + str(id(items)))
     filtered_items = items if chosen_status == "All" else [it for it in items if it["status"] == chosen_status]
-
+ 
     rows = []
     for g in filtered_items:
         rows.append({
@@ -841,7 +851,7 @@ def render_dashboard_stage(items, status_options):
             "USC": fmt_val(g["usc_name"]),
             "Call Status": g["status"],
         })
-
+ 
     table_html = "<table class='bs-table'><thead><tr>"
     for col_name in ["Driver Name", "Driver ID", "Contact Number", "USC", "Call Status"]:
         table_html += "<th>" + col_name + "</th>"
@@ -857,48 +867,48 @@ def render_dashboard_stage(items, status_options):
         table_html += "</tr>"
     table_html += "</tbody></table>"
     st.markdown(table_html, unsafe_allow_html=True)
-
-
+ 
+ 
 def main():
     title_html = "<h1>" + LOGO_SVG + "Battery Smart</h1>"
     st.markdown(title_html, unsafe_allow_html=True)
     st.caption("Onboarding Call Tracker & Documentation Tracker")
-
+ 
     if "last_slack_result" in st.session_state:
         sent, err, driver_name = st.session_state.pop("last_slack_result")
         if sent:
             st.success(driver_name + " — posted to Slack!")
         else:
             st.error("Escalated " + driver_name + ", but Slack failed: " + err)
-
+ 
     call_sheet = get_call_sheet()
     docs_sheet = get_docs_sheet()
     call_df = load_call_data(call_sheet)
     docs_df = load_docs_data(docs_sheet)
-
+ 
     call_due = build_call_due_list(call_df)
     docs_due = build_docs_due_list(docs_df)
     escalations = build_escalations(call_df, docs_df)
-
+ 
     with st.sidebar:
         sidebar_logo_html = "<div class='sidebar-brand-box' style='display:flex;align-items:center;gap:10px;'>" + LOGO_SVG + "<span style='font-weight:800;font-size:1.25rem;letter-spacing:0.2px;'>Battery Smart</span></div>"
         st.markdown(sidebar_logo_html, unsafe_allow_html=True)
         view = st.radio("View", ["📞 Onboarding Call Tracker", "📄 Documentation Tracker", "🚨 Escalations", "📊 Dashboard"], label_visibility="collapsed")
         st.divider()
-
+ 
         call_stat_html = "<div class='sidebar-stat-box'><div class='sidebar-stat-num'>" + str(len(call_due)) + "</div><div class='sidebar-stat-label'>Calls Due Today</div></div>"
         st.markdown(call_stat_html, unsafe_allow_html=True)
         docs_stat_html = "<div class='sidebar-stat-box'><div class='sidebar-stat-num'>" + str(len(docs_due)) + "</div><div class='sidebar-stat-label'>Docs Checks Due Today</div></div>"
         st.markdown(docs_stat_html, unsafe_allow_html=True)
         esc_stat_html = "<div class='sidebar-stat-box'><div class='sidebar-stat-num'>" + str(len(escalations)) + "</div><div class='sidebar-stat-label'>Open Escalations</div></div>"
         st.markdown(esc_stat_html, unsafe_allow_html=True)
-
+ 
         st.divider()
         if st.button("🔄 Refresh Data", use_container_width=True):
             load_call_data.clear()
             load_docs_data.clear()
             st.rerun()
-
+ 
     if view == "📞 Onboarding Call Tracker":
         render_generic_tab(call_due, call_sheet, call_df, "call", render_call_detail)
     elif view == "📄 Documentation Tracker":
@@ -913,7 +923,9 @@ def main():
             render_dashboard_stage(call_today_all, CALL_STATUS_OPTIONS)
         with dash_tab2:
             render_dashboard_stage(docs_today_all, DOCS_STATUS_OPTIONS)
-
-
+ 
+ 
 if __name__ == "__main__":
     main()
+ 
+
