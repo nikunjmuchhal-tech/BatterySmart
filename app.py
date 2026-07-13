@@ -623,11 +623,9 @@ def render_docs_detail(item, sheet, df, unique_key):
     checklist_box = st.container(border=True)
     current_doc_values = {}
     with checklist_box:
-        header_c1, header_c2, header_c3, header_c4 = st.columns([2, 1.4, 1.1, 1.1])
+        header_c1, header_c3, header_c4 = st.columns([2.4, 1.3, 1.3])
         with header_c1:
             st.markdown("<span class='detail-label'>DOCUMENT</span>", unsafe_allow_html=True)
-        with header_c2:
-            st.markdown("<span class='detail-label'>STATUS</span>", unsafe_allow_html=True)
         with header_c3:
             st.markdown("<span class='detail-label'>&nbsp;</span>", unsafe_allow_html=True)
         with header_c4:
@@ -637,14 +635,9 @@ def render_docs_detail(item, sheet, df, unique_key):
             current_status = item.get(item_key, "Not Collected")
             current_doc_values[label] = current_status
 
-            row_c1, row_c2, row_c3, row_c4 = st.columns([2, 1.4, 1.1, 1.1])
+            row_c1, row_c3, row_c4 = st.columns([2.4, 1.3, 1.3])
             with row_c1:
                 st.markdown("**" + label + "**")
-            with row_c2:
-                if current_status == "Collected":
-                    st.markdown("<span class='status-pill documents-received'>🟢 Collected</span>", unsafe_allow_html=True)
-                else:
-                    st.markdown("<span class='status-pill not-received'>🔴 Not Collected</span>", unsafe_allow_html=True)
             with row_c3:
                 if st.button("✅ Collected", key="doc_ok_" + item_key + "_" + unique_key, use_container_width=True):
                     save_updates(sheet, df, item["sheet_row"], {sheet_col: "Collected"})
