@@ -169,11 +169,18 @@ def send_slack_message(text, thread_ts=None, driver_id=None, source=None, includ
     a real interactive "Mark Resolved" button.
     Requires st.secrets["slack_bot_token"] and st.secrets["slack_channel_id"].
     Returns (ok: bool, ts: str|None, error: str)
+
+    If the bot token path isn't configured or fails outright, this automatically
+    falls back to the Incoming Webhook (send_slack_alert) so the escalation still
+    reaches Slack - just without threading/the Mark Resolved button.
     """
     token = st.secrets.get("slack_bot_token", "")
     channel = st.secrets.get("slack_channel_id", "")
     if not token or not channel:
-        return False, None, "No slack_bot_token / slack_channel_id found in secrets."
+        webhook_sent, webhook_err = send_slack_alert(text)
+        if webhook_sent:
+            return True, None, "(sent via webhook fallback - bot token not configured: add slack_bot_token + slack_channel_id to secrets for threading/buttons)"
+        return False, None, "No slack_bot_token / slack_channel_id in secrets, AND webhook fallback failed: " + webhook_err
 
     payload = {"channel": channel, "text": text}
     if thread_ts:
@@ -205,9 +212,19 @@ def send_slack_message(text, thread_ts=None, driver_id=None, source=None, includ
         data = resp.json()
         if data.get("ok"):
             return True, data.get("ts"), ""
-        return False, None, "Slack error: " + str(data.get("error"))
+
+        slack_err = str(data.get("error"))
+        # Bot-token path failed (bad token, bot not in channel, wrong channel id, etc).
+        # Fall back to the webhook so the escalation isn't silently lost.
+        webhook_sent, webhook_err = send_slack_alert(text)
+        if webhook_sent:
+            return True, None, "(bot token failed: '" + slack_err + "' - sent via webhook fallback instead. Fix: check slack_bot_token is valid and the bot user is invited to the channel with 'chat:write' scope)"
+        return False, None, "Slack bot-token error: " + slack_err + " | Webhook fallback also failed: " + webhook_err
     except Exception as e:
-        return False, None, "Request failed: " + str(e)
+        webhook_sent, webhook_err = send_slack_alert(text)
+        if webhook_sent:
+            return True, None, "(bot token request crashed: " + str(e) + " - sent via webhook fallback instead)"
+        return False, None, "Request failed: " + str(e) + " | Webhook fallback also failed: " + webhook_err
 
 
 st.markdown(
@@ -504,6 +521,33 @@ def build_docs_today_all(df):
     return rows
 
 
+def _build_docs_item(i, row):
+    item = {}
+    item["sheet_row"] = i + 2
+    item["driver_id"] = row.get("Driver_ID")
+    item["driver_name"] = row.get("Driver_Name")
+    item["contact_number"] = row.get("Contact_Number")
+    item["zone"] = row.get("Zone")
+    item["onboarding_date"] = row.get("Onboarding_Date")
+    item["usc_id"] = row.get("USC_ID")
+    item["usc_name"] = row.get("USC_Name")
+    item["dom"] = get_dom(row.get("USC_Name"))
+    item["dealership"] = row.get("Dealership")
+    item["vehicle_model"] = row.get("Vehicle_Model")
+    item["total_signup_amount"] = row.get("Total_Signup_Amount")
+    item["amount_paid"] = row.get("Amount_Paid")
+    item["plan_amount"] = row.get("Plan_Amount")
+    item["autopay_status"] = row.get("Autopay_Mandate_Status", "")
+    item["emi_due_date"] = row.get("EMI_Due_Date", "")
+    item["current_notes"] = row.get("Docs_Notes", "")
+    item["current_status"] = row.get("Docs_Status", "Pending") or "Pending"
+    item["invoice_status"] = row.get("Invoice_Status", "Not Received") or "Not Received"
+    item["number_plate_status"] = row.get("Number_Plate_Status", "Not Received") or "Not Received"
+    item["insurance_status"] = row.get("Insurance_Status", "Not Received") or "Not Received"
+    item["script"] = DOCS_SCRIPT
+    return item
+
+
 def build_docs_due_list(df):
     today = today_ist()
     due = []
@@ -511,30 +555,23 @@ def build_docs_due_list(df):
         due_date = parse_date(row.get("Docs_Call_Due_Date"))
         status = row.get("Docs_Status", "Pending") or "Pending"
         if due_date == today and status == "Pending":
-            item = {}
-            item["sheet_row"] = i + 2
-            item["driver_id"] = row.get("Driver_ID")
-            item["driver_name"] = row.get("Driver_Name")
-            item["contact_number"] = row.get("Contact_Number")
-            item["zone"] = row.get("Zone")
-            item["onboarding_date"] = row.get("Onboarding_Date")
-            item["usc_id"] = row.get("USC_ID")
-            item["usc_name"] = row.get("USC_Name")
-            item["dom"] = get_dom(row.get("USC_Name"))
-            item["dealership"] = row.get("Dealership")
-            item["vehicle_model"] = row.get("Vehicle_Model")
-            item["total_signup_amount"] = row.get("Total_Signup_Amount")
-            item["amount_paid"] = row.get("Amount_Paid")
-            item["plan_amount"] = row.get("Plan_Amount")
-            item["autopay_status"] = row.get("Autopay_Mandate_Status", "")
-            item["emi_due_date"] = row.get("EMI_Due_Date", "")
-            item["current_notes"] = row.get("Docs_Notes", "")
-            item["invoice_status"] = row.get("Invoice_Status", "Not Received") or "Not Received"
-            item["number_plate_status"] = row.get("Number_Plate_Status", "Not Received") or "Not Received"
-            item["insurance_status"] = row.get("Insurance_Status", "Not Received") or "Not Received"
-            item["script"] = DOCS_SCRIPT.format(name=row.get("Driver_Name"))
-            due.append(item)
+            due.append(_build_docs_item(i, row))
     return due
+
+
+def build_docs_all_records(df):
+    """
+    Every driver in the Docs Tracker, regardless of due date or current status -
+    mirrors build_call_all_records so a manager can reopen/correct any past
+    documentation record (e.g. a document arrives later, or was marked wrong).
+    """
+    records = []
+    for i, row in df.iterrows():
+        due_date = row.get("Docs_Call_Due_Date")
+        if not due_date:
+            continue
+        records.append(_build_docs_item(i, row))
+    return records
 
 
 def build_escalations(call_df, docs_df):
@@ -704,18 +741,21 @@ def render_call_detail(item, sheet, df, unique_key):
             st.rerun()
 
     with btn3:
-        if st.button("🔁 Follow-up Tomorrow", key="followup_" + unique_key, use_container_width=True):
-            updates = dict(base_updates)
-            tomorrow = today_ist() + timedelta(days=1)
-            updates[item["due_col"]] = tomorrow.strftime("%d/%m/%Y")
-            updates[item["status_col"]] = "Pending"
-            updates[item["followup_flag_col"]] = True
-            save_updates(sheet, df, item["sheet_row"], updates)
-            load_call_data.clear()
-            st.toast("Scheduled for tomorrow!", icon="🔁")
-            st.rerun()
         if item["is_followup"]:
-            st.caption("This driver has already had at least one follow-up before, on this stage.")
+            st.button("🔁 Follow-up Tomorrow", key="followup_" + unique_key, use_container_width=True, disabled=True)
+            st.caption("⚠️ Already followed up once on this stage. Please mark Attempted or Escalate to DOM instead.")
+        else:
+            if st.button("🔁 Follow-up Tomorrow", key="followup_" + unique_key, use_container_width=True):
+                updates = dict(base_updates)
+                tomorrow = today_ist() + timedelta(days=1)
+                updates[item["due_col"]] = tomorrow.strftime("%d/%m/%Y")
+                updates[item["status_col"]] = "Pending"
+                updates[item["followup_flag_col"]] = True
+                updates["Escalation_Status"] = ""
+                save_updates(sheet, df, item["sheet_row"], updates)
+                load_call_data.clear()
+                st.toast("Scheduled for tomorrow!", icon="🔁")
+                st.rerun()
 
 
 DOC_ITEMS = [
@@ -1031,10 +1071,12 @@ def main():
 
     if "last_slack_result" in st.session_state:
         sent, err, driver_name = st.session_state.pop("last_slack_result")
-        if sent:
+        if sent and not err:
             st.success(driver_name + " — posted to Slack!")
+        elif sent and err:
+            st.warning(driver_name + " — posted to Slack, but with a note: " + err)
         else:
-            st.error("Escalated " + driver_name + ", but Slack failed: " + err)
+            st.error(driver_name + " — Slack post FAILED: " + err)
 
     call_sheet = get_call_sheet()
     docs_sheet = get_docs_sheet()
@@ -1064,6 +1106,22 @@ def main():
             load_docs_data.clear()
             st.rerun()
 
+        if st.button("🔧 Test Slack Connection", use_container_width=True):
+            test_msg = "🔧 Test message from Battery Smart app — sent at " + today_ist().strftime("%d/%m/%Y") + " IST. If you see this, Slack is working."
+            token_set = bool(st.secrets.get("slack_bot_token", ""))
+            channel_set = bool(st.secrets.get("slack_channel_id", ""))
+            webhook_set = bool(st.secrets.get("slack_webhook_url", ""))
+            st.caption("Bot token in secrets: " + ("✅" if token_set else "❌ missing"))
+            st.caption("Channel ID in secrets: " + ("✅" if channel_set else "❌ missing"))
+            st.caption("Webhook URL in secrets (fallback): " + ("✅" if webhook_set else "❌ missing"))
+            sent, ts, err = send_slack_message(test_msg)
+            if sent and not err:
+                st.success("Slack is working! Message posted via Bot Token.")
+            elif sent and err:
+                st.warning("Message got through, but: " + err)
+            else:
+                st.error("Slack test FAILED: " + err)
+
     if view == "📞 Onboarding Call Tracker":
         with st.expander("✏️ Search & edit any record (past calls, wrong result, callback later, etc.)"):
             edit_search = st.text_input("🔍 Search by driver name or ID", key="edit_search_call", placeholder="Type a name or Driver ID...")
@@ -1085,6 +1143,24 @@ def main():
 
         render_generic_tab(call_due, call_sheet, call_df, "call", render_call_detail)
     elif view == "📄 Documentation Tracker":
+        with st.expander("✏️ Search & edit any record (document arrived late, wrong entry, etc.)"):
+            edit_search_docs = st.text_input("🔍 Search by driver name or ID", key="edit_search_docs", placeholder="Type a name or Driver ID...")
+            if edit_search_docs and edit_search_docs.strip():
+                term = edit_search_docs.strip().lower()
+                all_docs_records = build_docs_all_records(docs_df)
+                matches = [r for r in all_docs_records if term in str(r["driver_name"]).lower() or term in str(r["driver_id"]).lower()]
+                if not matches:
+                    st.warning("No matching records found.")
+                else:
+                    labels = [
+                        r["driver_name"] + " (" + str(r["driver_id"]) + ") — currently: " + r["current_status"]
+                        for r in matches
+                    ]
+                    chosen_idx = st.selectbox("Select the exact record to edit", range(len(matches)), format_func=lambda i: labels[i], key="edit_pick_docs")
+                    chosen = matches[chosen_idx]
+                    edit_key = "edit_docs_" + str(chosen["sheet_row"])
+                    render_docs_detail(chosen, docs_sheet, docs_df, edit_key)
+
         render_generic_tab(docs_due, docs_sheet, docs_df, "docs", render_docs_detail)
     elif view == "🚨 Escalations":
         render_escalations_panel(call_sheet, call_df, docs_sheet, docs_df)
