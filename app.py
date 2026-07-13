@@ -402,6 +402,7 @@ def build_call_today_all(df):
                 "usc_name": row.get("USC_Name"),
                 "dom": get_dom(row.get("USC_Name")),
                 "status": row.get("Call_Status", "Pending") or "Pending",
+                "call_result": row.get("Call_Outcome_Detail", "") or "—",
             })
         due_date_2 = parse_date(row.get("Call_2_Due_Date"))
         if due_date_2 == today:
@@ -412,6 +413,7 @@ def build_call_today_all(df):
                 "usc_name": row.get("USC_Name"),
                 "dom": get_dom(row.get("USC_Name")),
                 "status": row.get("Call_2_Status", "Pending") or "Pending",
+                "call_result": row.get("Call_Outcome_Detail", "") or "—",
             })
     return rows
 
@@ -901,18 +903,27 @@ def render_dashboard_stage(items, status_options):
     chosen_status = st.selectbox("Filter by Call Status", status_filter_options, key="dash_status_filter_" + str(id(items)))
     filtered_items = items if chosen_status == "All" else [it for it in items if it["status"] == chosen_status]
 
+    has_call_result = any("call_result" in it for it in filtered_items)
+
     rows = []
     for g in filtered_items:
-        rows.append({
+        row_data = {
             "Driver Name": str(g["driver_name"]),
             "Driver ID": str(g["driver_id"]),
             "Contact Number": str(g["contact_number"]),
             "USC": fmt_val(g["usc_name"]),
             "Call Status": g["status"],
-        })
+        }
+        if has_call_result:
+            row_data["Call Response"] = fmt_val(g.get("call_result"))
+        rows.append(row_data)
+
+    columns = ["Driver Name", "Driver ID", "Contact Number", "USC", "Call Status"]
+    if has_call_result:
+        columns.append("Call Response")
 
     table_html = "<table class='bs-table'><thead><tr>"
-    for col_name in ["Driver Name", "Driver ID", "Contact Number", "USC", "Call Status"]:
+    for col_name in columns:
         table_html += "<th>" + col_name + "</th>"
     table_html += "</tr></thead><tbody>"
     for row in rows:
@@ -923,6 +934,8 @@ def render_dashboard_stage(items, status_options):
         table_html += "<td>" + row["USC"] + "</td>"
         status_class = "status-pill " + row["Call Status"].replace(" ", "-").lower()
         table_html += "<td><span class='" + status_class + "'>" + row["Call Status"] + "</span></td>"
+        if has_call_result:
+            table_html += "<td>" + row["Call Response"] + "</td>"
         table_html += "</tr>"
     table_html += "</tbody></table>"
     st.markdown(table_html, unsafe_allow_html=True)
