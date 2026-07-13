@@ -212,10 +212,14 @@ st.markdown(
     "[class*='st-key-docok_wrap_'] button p { color: #16a34a !important; font-weight: 700 !important; }"
     "[class*='st-key-docok_wrap_'] button:hover { background-color: #16a34a !important; }"
     "[class*='st-key-docok_wrap_'] button:hover p { color: #ffffff !important; }"
+    "[class*='st-key-docok_wrap_'] button[kind='primary'] { background-color: #16a34a !important; border-color: #16a34a !important; box-shadow: 0 2px 8px rgba(22,163,74,0.35) !important; }"
+    "[class*='st-key-docok_wrap_'] button[kind='primary'] p { color: #ffffff !important; }"
     "[class*='st-key-docno_wrap_'] button { background-color: #fef2f2 !important; border: 1.5px solid #dc2626 !important; color: #dc2626 !important; font-weight: 700 !important; }"
     "[class*='st-key-docno_wrap_'] button p { color: #dc2626 !important; font-weight: 700 !important; }"
     "[class*='st-key-docno_wrap_'] button:hover { background-color: #dc2626 !important; }"
     "[class*='st-key-docno_wrap_'] button:hover p { color: #ffffff !important; }"
+    "[class*='st-key-docno_wrap_'] button[kind='primary'] { background-color: #dc2626 !important; border-color: #dc2626 !important; box-shadow: 0 2px 8px rgba(220,38,38,0.35) !important; }"
+    "[class*='st-key-docno_wrap_'] button[kind='primary'] p { color: #ffffff !important; }"
     "</style>",
     unsafe_allow_html=True,
 )
@@ -670,18 +674,23 @@ def render_docs_detail(item, sheet, df, unique_key):
                 st.markdown("**" + label + "**")
             with row_c3:
                 with st.container(key="docok_wrap_" + item_key + "_" + unique_key):
-                    if st.button("✅ Received", key="doc_ok_" + item_key + "_" + unique_key, use_container_width=True):
+                    ok_type = "primary" if current_status == "Received" else "secondary"
+                    if st.button("✅ Received", key="doc_ok_" + item_key + "_" + unique_key, type=ok_type, use_container_width=True):
                         save_updates(sheet, df, item["sheet_row"], {sheet_col: "Received"})
                         load_docs_data.clear()
                         st.toast(label + " marked received!", icon="✅")
                         st.rerun()
             with row_c4:
                 with st.container(key="docno_wrap_" + item_key + "_" + unique_key):
-                    if st.button("❌ Not Received", key="doc_no_" + item_key + "_" + unique_key, use_container_width=True):
+                    no_type = "primary" if current_status == "Not Received" else "secondary"
+                    if st.button("❌ Not Received", key="doc_no_" + item_key + "_" + unique_key, type=no_type, use_container_width=True):
                         save_updates(sheet, df, item["sheet_row"], {sheet_col: "Not Received"})
                         load_docs_data.clear()
                         st.toast(label + " marked not received.", icon="❌")
                         st.rerun()
+
+    received_count = sum(1 for v in current_doc_values.values() if v == "Received")
+    st.caption(str(received_count) + " of " + str(len(current_doc_values)) + " documents marked Received.")
 
     st.write("")
     all_collected = all(v == "Received" for v in current_doc_values.values())
@@ -703,32 +712,30 @@ def render_docs_detail(item, sheet, df, unique_key):
             st.rerun()
     with bfoot2:
         if st.button("🚨 Escalate to DOM", key="docsescalate_" + unique_key, use_container_width=True):
-            if not notes or not notes.strip():
-                st.warning("Please add notes before escalating.")
-            else:
-                docs_status = "Documents Received" if all_collected else "Not Received"
-                updates = {"Docs_Notes": notes, "Docs_Status": docs_status, "Escalation_Status": "Open"}
-                save_updates(sheet, df, item["sheet_row"], updates)
-                load_docs_data.clear()
-                dom_id = DOM_SLACK_ID.get(item["dom"])
-                dom_mention = ("<@" + dom_id + "> ") if dom_id else ""
-                missing = [label for label, v in current_doc_values.items() if v != "Received"]
-                missing_text = ", ".join(missing) if missing else "None — all documents collected"
-                msg = (
-                    dom_mention + "🚨 *Case Escalated* — Documentation\n"
-                    "Driver: " + str(item["driver_name"]) + " (" + str(item["driver_id"]) + ")\n"
-                    "Contact: " + str(item["contact_number"]) + "\n"
-                    "USC: " + fmt_val(item["usc_name"]) + "\n"
-                    "DOM: " + item["dom"] + "\n"
-                    "Invoice: " + current_doc_values.get("🧾 Invoice", "Not Received") + "\n"
-                    "Number Plate: " + current_doc_values.get("🔢 Number Plate", "Not Received") + "\n"
-                    "Insurance: " + current_doc_values.get("🛡️ Insurance", "Not Received") + "\n"
-                    "Not Received: " + missing_text + "\n"
-                    "Issue: " + notes
-                )
-                sent, err = send_slack_alert(msg)
-                st.session_state["last_slack_result"] = (sent, err, item["driver_name"])
-                st.rerun()
+            docs_status = "Documents Received" if all_collected else "Not Received"
+            updates = {"Docs_Notes": notes, "Docs_Status": docs_status, "Escalation_Status": "Open"}
+            save_updates(sheet, df, item["sheet_row"], updates)
+            load_docs_data.clear()
+            dom_id = DOM_SLACK_ID.get(item["dom"])
+            dom_mention = ("<@" + dom_id + "> ") if dom_id else ""
+            missing = [label for label, v in current_doc_values.items() if v != "Received"]
+            missing_text = ", ".join(missing) if missing else "None — all documents collected"
+            issue_line = ("\nIssue: " + notes) if notes and notes.strip() else ""
+            msg = (
+                dom_mention + "🚨 *Case Escalated* — Documentation\n"
+                "Driver: " + str(item["driver_name"]) + " (" + str(item["driver_id"]) + ")\n"
+                "Contact: " + str(item["contact_number"]) + "\n"
+                "USC: " + fmt_val(item["usc_name"]) + "\n"
+                "DOM: " + item["dom"] + "\n"
+                "Invoice: " + current_doc_values.get("🧾 Invoice", "Not Received") + "\n"
+                "Number Plate: " + current_doc_values.get("🔢 Number Plate", "Not Received") + "\n"
+                "Insurance: " + current_doc_values.get("🛡️ Insurance", "Not Received") + "\n"
+                "Not Received: " + missing_text
+                + issue_line
+            )
+            sent, err = send_slack_alert(msg)
+            st.session_state["last_slack_result"] = (sent, err, item["driver_name"])
+            st.rerun()
 
 
 def render_generic_tab(items, sheet, df, key_prefix, detail_fn):
