@@ -541,6 +541,12 @@ def build_escalations(call_df, docs_df):
     escalations = []
     for i, row in call_df.iterrows():
         if str(row.get("Escalation_Status", "")).strip() == "Open":
+            escalated_status_col = None
+            for stage in CALL_STAGES:
+                s_due_col, s_status_col, _, _ = call_stage_columns(stage)
+                if str(row.get(s_status_col, "")).strip() == "Escalated to DOM":
+                    escalated_status_col = s_status_col
+                    break
             escalations.append({
                 "source": "Onboarding Call",
                 "sheet_row": i + 2,
@@ -551,6 +557,7 @@ def build_escalations(call_df, docs_df):
                 "dom": get_dom(row.get("USC_Name")),
                 "notes": row.get("Call_Notes", ""),
                 "status_col": "Escalation_Status",
+                "escalated_status_col": escalated_status_col,
                 "slack_ts": row.get("Slack_Message_Ts", "") or "",
             })
     for i, row in docs_df.iterrows():
@@ -565,6 +572,7 @@ def build_escalations(call_df, docs_df):
                 "dom": get_dom(row.get("USC_Name")),
                 "notes": row.get("Docs_Notes", ""),
                 "status_col": "Escalation_Status",
+                "escalated_status_col": "Docs_Status",
                 "invoice_status": row.get("Invoice_Status", "Not Received") or "Not Received",
                 "number_plate_status": row.get("Number_Plate_Status", "Not Received") or "Not Received",
                 "insurance_status": row.get("Insurance_Status", "Not Received") or "Not Received",
@@ -928,7 +936,14 @@ def render_escalations_panel(call_sheet, call_df, docs_sheet, docs_df):
         if st.button("Mark Resolved", key=resolve_key):
             target_sheet = call_sheet if e["source"] == "Onboarding Call" else docs_sheet
             target_df = call_df if e["source"] == "Onboarding Call" else docs_df
-            save_updates(target_sheet, target_df, e["sheet_row"], {"Escalation_Status": "Resolved"})
+
+            resolved_updates = {"Escalation_Status": "Resolved"}
+            reset_col = e.get("escalated_status_col")
+            if reset_col:
+                reset_value = "Call Attempted" if e["source"] == "Onboarding Call" else "Documents Received"
+                resolved_updates[reset_col] = reset_value
+
+            save_updates(target_sheet, target_df, e["sheet_row"], resolved_updates)
             if e["source"] == "Onboarding Call":
                 load_call_data.clear()
             else:
