@@ -15,11 +15,60 @@ SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 CALL_SHEET_TAB = "Call Logs"
 DOCS_SHEET_TAB = "Docs Tracker"
 
-# Paste the shareable Google Doc / PDF links for each script below.
-# Leave as "" until you have the link ready - the app will show a note instead of a broken link.
-CALL_SCRIPT_DOC_URL = "https://ap.wps.com/cms/docs/d/cbCaegZNWC2ApuUq"
-CALL_2_SCRIPT_DOC_URL = "https://ap.wps.com/cms/docs/d/cbCaegZNWC2ApuUq"
-DOCS_SCRIPT_DOC_URL = "https://ap.wps.com/cms/docs/d/cbCaehCnxrzfbQNa"
+CALL_SCRIPT = """1. Call Opening
+Agent: Namaste! Main Battery Smart se {name} baat kar raha/rahi hoon. Kya mera baat [Customer Name] ji se ho raha hai?
+Agent: Sir/Ma'am, sabse pehle Battery Smart family mein aapka swagat hai! Aur aapke naye vehicle ki purchase ke liye bahut-bahut badhaii!
+Agent: Sir, kya aap please confirm kar sakte hain ki aapne kaunsa vehicle model liya hai?
+Agent: Aur uska color kya hai?
+
+2. Delivery Experience Check
+Agent: Sir, aapki vehicle delivery kaisi rahi? Koi issue toh nahi aaya delivery ke time?
+Delivery issue (if any): __________________________________________
+
+3. EMI / Payment Confirmation
+Agent: Sir, ab main aapko payment ke baare mein kuch important information dena chahti hoon. Kya aapne apni EMI Autopay start kar di hai?
+
+3a. If EMI already started
+Agent: Great sir! Kya aap confirm kar sakte hain ki EMI amount kitna set hua hai aur payment date kya hai?
+EMI Amount confirmed: __________
+Payment Date confirmed: __________
+Agent: Perfect, bas make sure karein ki har mahine time par payment ho jaye, taaki koi late fee ya issue na ho. Daily fees - Rs 150
+
+3b. If EMI not yet started
+Agent: Sir, agar aapne abhi tak EMI start nahi ki hai toh please jald hi start kar lein. Aapko yeh keh dun ki aapka payment specifically Upgrid Solutions ke through ek link ke zariye transfer hoga.
+Agent: Woh link aapke registered number par SMS/WhatsApp ke through aayega. Kindly us link par click karke apni payment details verify karke EMI setup complete kar lein.
+
+4. Closing
+Agent: Sir/Ma'am, aapka time dene ke liye bahut dhanyavaad. Agar aapko koi bhi query ho Battery Smart ya EMI payment se related, toh aap humein kabhi bhi isi number par contact kar sakte hain.
+Agent: Ek baar phir se, Battery Smart family mein aapka swagat hai. Have a great day!"""
+
+CALL_2_SCRIPT = CALL_SCRIPT
+
+DOCS_SCRIPT = """Battery Smart – D+10/11 Document Status Check Call Script
+Purpose: Follow-up call to check status of Invoice, Number Plate & Insurance
+
+1. Call Opening
+Agent: Namaste! Main Battery Smart se baat kar raha/rahi hoon. Kya mera baat [Customer Name] ji se ho raha hai?
+[Wait for confirmation. If wrong number/unavailable, politely end call and note for callback.]
+Agent: Sir/Ma'am, hum aapko ek chota sa follow-up call kar rahe hain, aapke vehicle ke documents ka status check karne ke liye.
+
+2. Document Status Check
+Ask about each document one by one:
+Agent: Sir, kya aapko invoice number mil chuka hai?
+Agent: Aur number plate, wo aapko receive hui hai kya?
+Agent: Insurance document ke baare mein bhi bata dijiye, wo aapke paas aa gaya hai kya?
+Reason of pending document: __________________________________________
+
+3. Quick Service Review
+Agent: Sir, ek chota sa feedback chahiye tha - overall aapki Battery Smart ke saath ab tak ki service kaisi rahi hai?
+Agent: Koi issue ya complaint hai jo aap share karna chahenge?
+Feedback / issue (if any): __________________________________________
+
+4. Closing
+Agent: Sir/Ma'am, aapka time dene ke liye bahut dhanyavaad. Agar aapko aage payment ya document ya koi query ho, toh aap humein contact kar sakte hain.
+Agent: Have a great day, Battery Smart family mein aapka saath dene ke liye shukriya!
+
+[Note: Post-documentation, this account will be handed over to the EMI team for further follow-up.]"""
 
 CALL_STATUS_OPTIONS = ["Pending", "Call Attempted", "Escalated to DOM", "Follow-up Needed"]
 DOCS_STATUS_OPTIONS = ["Pending", "Documents Received", "Not Received", "Escalated to DOM"]
@@ -317,7 +366,7 @@ def build_call_due_list(df):
             item["is_followup"] = str(row.get("Is_Followup", "")).strip().upper() in ("TRUE", "1", "YES")
             item["current_notes"] = row.get("Call_Notes", "")
             item["show_dfe"] = True
-            item["script_url"] = CALL_SCRIPT_DOC_URL
+            item["script"] = CALL_SCRIPT.format(name=row.get("Driver_Name"))
             due.append(item)
 
         # Call 2 (D+2)
@@ -334,7 +383,7 @@ def build_call_due_list(df):
             item["is_followup"] = str(row.get("Is_Followup_2", "")).strip().upper() in ("TRUE", "1", "YES")
             item["current_notes"] = row.get("Call_2_Notes", "")
             item["show_dfe"] = False
-            item["script_url"] = CALL_2_SCRIPT_DOC_URL
+            item["script"] = CALL_2_SCRIPT.format(name=row.get("Driver_Name"))
             due.append(item)
 
     return due
@@ -412,7 +461,7 @@ def build_docs_due_list(df):
             item["invoice_status"] = row.get("Invoice_Status", "Not Received") or "Not Received"
             item["number_plate_status"] = row.get("Number_Plate_Status", "Not Received") or "Not Received"
             item["insurance_status"] = row.get("Insurance_Status", "Not Received") or "Not Received"
-            item["script_url"] = DOCS_SCRIPT_DOC_URL
+            item["script"] = DOCS_SCRIPT.format(name=row.get("Driver_Name"))
             due.append(item)
     return due
 
@@ -507,13 +556,7 @@ def render_call_detail(item, sheet, df, unique_key):
 
     st.write("")
     with st.expander("▶ Show call script"):
-        if item.get("script_url"):
-            st.markdown(
-                "<a class='call-link' href='" + item["script_url"] + "' target='_blank'>📄 Open Call Script</a>",
-                unsafe_allow_html=True,
-            )
-        else:
-            st.caption("No script link has been added yet for this stage.")
+        st.markdown(item["script"])
     if item["current_notes"]:
         st.caption("Previous notes: " + str(item["current_notes"]))
 
@@ -639,13 +682,7 @@ def render_docs_detail(item, sheet, df, unique_key):
 
     st.write("")
     with st.expander("▶ Show call script"):
-        if item.get("script_url"):
-            st.markdown(
-                "<a class='call-link' href='" + item["script_url"] + "' target='_blank'>📄 Open Call Script</a>",
-                unsafe_allow_html=True,
-            )
-        else:
-            st.caption("No script link has been added yet for this stage.")
+        st.markdown(item["script"])
     if item["current_notes"]:
         st.caption("Previous notes: " + str(item["current_notes"]))
 
