@@ -494,7 +494,8 @@ def render_call_detail(item, sheet, df, unique_key):
             st.caption("⚠️ This is already a follow-up call (one repeat used).")
 
     st.write("")
-    st.info("**Script:** " + item["script"])
+    with st.expander("▶ Show call script"):
+        st.info(item["script"])
     if item["current_notes"]:
         st.caption("Previous notes: " + str(item["current_notes"]))
 
@@ -619,7 +620,8 @@ def render_docs_detail(item, sheet, df, unique_key):
             st.markdown(emi_html, unsafe_allow_html=True)
 
     st.write("")
-    st.info("**Script:** " + item["script"])
+    with st.expander("▶ Show call script"):
+        st.info(item["script"])
     if item["current_notes"]:
         st.caption("Previous notes: " + str(item["current_notes"]))
 
@@ -920,3 +922,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
