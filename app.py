@@ -688,22 +688,20 @@ def render_call_detail(item, sheet, df, unique_key):
 
     with btn2:
         if st.button("🚨 Escalate to DOM", key="escalate_" + unique_key, use_container_width=True):
-            if not notes or not notes.strip():
-                st.warning("Please add call notes describing the issue before escalating.")
-            else:
-                updates = dict(base_updates)
-                updates[item["status_col"]] = "Escalated to DOM"
-                updates["Escalation_Status"] = "Open"
-                save_updates(sheet, df, item["sheet_row"], updates)
-                load_call_data.clear()
-                dom_id = DOM_SLACK_ID.get(item["dom"])
-                dom_mention = ("<@" + dom_id + "> ") if dom_id else ""
-                msg = dom_mention + "🚨 *Case Escalated* — Onboarding Call (" + item["stage_label"] + ")\nDriver: " + str(item["driver_name"]) + " (" + str(item["driver_id"]) + ")\nContact: " + str(item["contact_number"]) + "\nUSC: " + fmt_val(item["usc_name"]) + "\nDOM: " + item["dom"] + "\nIssue: " + notes
-                sent, ts, err = send_slack_message(msg, driver_id=item["driver_id"], source="Onboarding Call", include_button=True)
-                if sent and ts:
-                    save_updates(sheet, df, item["sheet_row"], {"Slack_Message_Ts": ts})
-                st.session_state["last_slack_result"] = (sent, err, item["driver_name"])
-                st.rerun()
+            updates = dict(base_updates)
+            updates[item["status_col"]] = "Escalated to DOM"
+            updates["Escalation_Status"] = "Open"
+            save_updates(sheet, df, item["sheet_row"], updates)
+            load_call_data.clear()
+            dom_id = DOM_SLACK_ID.get(item["dom"])
+            dom_mention = ("<@" + dom_id + "> ") if dom_id else ""
+            issue_line = ("\nIssue: " + notes) if notes and notes.strip() else ""
+            msg = dom_mention + "🚨 *Case Escalated* — Onboarding Call (" + item["stage_label"] + ")\nDriver: " + str(item["driver_name"]) + " (" + str(item["driver_id"]) + ")\nContact: " + str(item["contact_number"]) + "\nUSC: " + fmt_val(item["usc_name"]) + "\nDOM: " + item["dom"] + issue_line
+            sent, ts, err = send_slack_message(msg, driver_id=item["driver_id"], source="Onboarding Call", include_button=True)
+            if sent and ts:
+                save_updates(sheet, df, item["sheet_row"], {"Slack_Message_Ts": ts})
+            st.session_state["last_slack_result"] = (sent, err, item["driver_name"])
+            st.rerun()
 
     with btn3:
         if st.button("🔁 Follow-up Tomorrow", key="followup_" + unique_key, use_container_width=True):
