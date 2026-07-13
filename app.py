@@ -27,7 +27,7 @@ Payment Date confirmed: __________
 Agent: Perfect, bas make sure karein ki har mahine time par payment kar de, taaki koi late fee ya issue na ho.
 
 If EMI not yet started:
-Agent: Sir, agar aapne abhi tak UPI Autopay start nahi ki hai toh please jald hi start kar lein. Aapko payment specifically Upgrid Solutions ke through aayi ek link par karna hai.
+Agent: Sir, agar aapne abhi tak UPI Autopay start nahi ki hai toh please jald hi start kar lein. Ham abhi aapki Autopay setup mein sahayta kar sakte hai  Aapko payment specifically Upgrid Solutions ke through aayi ek link par karna hai.
 Agent: Woh link aapke registered number par SMS/WhatsApp ke through aayega. Kindly us link par click karke apni payment details verify karke EMI setup complete kar lein.
 
 Kya aapse hamare DFE ne koi extra Fees li thi ? ?
