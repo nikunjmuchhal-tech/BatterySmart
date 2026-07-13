@@ -30,6 +30,8 @@ If EMI not yet started:
 Agent: Sir, agar aapne abhi tak UPI Autopay start nahi ki hai toh please jald hi start kar lein. Aapko payment specifically Upgrid Solutions ke through aayi ek link par karna hai.
 Agent: Woh link aapke registered number par SMS/WhatsApp ke through aayega. Kindly us link par click karke apni payment details verify karke EMI setup complete kar lein.
 
+Kya aapse hamare DFE ne koi extra Fees li thi ? ?
+
 Agent: Sir/Ma'am, aapka time dene ke liye bahut dhanyavaad. Agar aapko koi bhi query ho Battery Smart ya UPI payment se related, toh aap humein kabhi bhi isi number par contact kar sakte hain.
 Agent: Ek baar phir se, Battery Smart family mein aapka swagat hai. Have a great day!"""
 
