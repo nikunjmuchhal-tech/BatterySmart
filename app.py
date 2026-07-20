@@ -619,14 +619,28 @@ def build_escalations(call_df, docs_df):
 
 
 def save_updates(sheet, df, sheet_row, updates):
+    """
+    Writes `updates` to the sheet AND patches the same cells into the
+    in-memory (cached) dataframe, so callers don't need to clear the
+    st.cache_data cache and force a full re-fetch of the whole sheet just
+    to see their own write reflected. This avoids:
+      1) an extra Google Sheets API round-trip on every single button click
+         (this was the main source of the "app feels slow" complaints), and
+      2) a read-after-write race, where the immediate refetch could return
+         a not-yet-propagated (stale) version of the row and appear to
+         "undo" or "overwrite" a value that was in fact saved correctly.
+    """
     header = df.columns.tolist()
     batch = []
+    row_idx = sheet_row - 2  # dataframe is 0-indexed; sheet row 2 == df index 0
     for col_name in updates:
         if col_name not in header:
             continue
         col_idx = header.index(col_name) + 1
         cell_range = gspread.utils.rowcol_to_a1(sheet_row, col_idx)
         batch.append({"range": cell_range, "values": [[updates[col_name]]]})
+        if 0 <= row_idx < len(df):
+            df.at[row_idx, col_name] = updates[col_name]
     if batch:
         sheet.batch_update(batch)
 
@@ -719,7 +733,6 @@ def render_call_detail(item, sheet, df, unique_key):
             updates[item["status_col"]] = "Call Attempted"
             updates["Escalation_Status"] = ""
             save_updates(sheet, df, item["sheet_row"], updates)
-            load_call_data.clear()
             st.toast("Marked as attempted!", icon="✅")
             st.rerun()
 
@@ -729,7 +742,6 @@ def render_call_detail(item, sheet, df, unique_key):
             updates[item["status_col"]] = "Escalated to DOM"
             updates["Escalation_Status"] = "Open"
             save_updates(sheet, df, item["sheet_row"], updates)
-            load_call_data.clear()
             dom_id = DOM_SLACK_ID.get(item["dom"])
             dom_mention = ("<@" + dom_id + "> ") if dom_id else ""
             issue_line = ("\nIssue: " + notes) if notes and notes.strip() else ""
@@ -753,7 +765,6 @@ def render_call_detail(item, sheet, df, unique_key):
                 updates[item["followup_flag_col"]] = True
                 updates["Escalation_Status"] = ""
                 save_updates(sheet, df, item["sheet_row"], updates)
-                load_call_data.clear()
                 st.toast("Scheduled for tomorrow!", icon="🔁")
                 st.rerun()
 
@@ -853,7 +864,6 @@ def render_docs_detail(item, sheet, df, unique_key):
                     ok_type = "primary" if flash == "Received" else "secondary"
                     if st.button("✅ Received", key="doc_ok_" + item_key + "_" + unique_key, type=ok_type, use_container_width=True):
                         save_updates(sheet, df, item["sheet_row"], {sheet_col: "Received"})
-                        load_docs_data.clear()
                         st.session_state[flash_key] = "Received"
                         st.toast(label + " marked received!", icon="✅")
                         st.rerun()
@@ -862,7 +872,6 @@ def render_docs_detail(item, sheet, df, unique_key):
                     no_type = "primary" if flash == "Not Received" else "secondary"
                     if st.button("❌ Not Received", key="doc_no_" + item_key + "_" + unique_key, type=no_type, use_container_width=True):
                         save_updates(sheet, df, item["sheet_row"], {sheet_col: "Not Received"})
-                        load_docs_data.clear()
                         st.session_state[flash_key] = "Not Received"
                         st.toast(label + " marked not received.", icon="❌")
                         st.rerun()
@@ -885,7 +894,6 @@ def render_docs_detail(item, sheet, df, unique_key):
                 "Insurance_Status": "Received",
             }
             save_updates(sheet, df, item["sheet_row"], updates)
-            load_docs_data.clear()
             st.toast("All documents marked received!", icon="✅")
             st.rerun()
     with bfoot2:
@@ -893,7 +901,6 @@ def render_docs_detail(item, sheet, df, unique_key):
             docs_status = "Documents Received" if all_collected else "Not Received"
             updates = {"Docs_Notes": notes, "Docs_Status": docs_status, "Escalation_Status": "Open"}
             save_updates(sheet, df, item["sheet_row"], updates)
-            load_docs_data.clear()
             dom_id = DOM_SLACK_ID.get(item["dom"])
             dom_mention = ("<@" + dom_id + "> ") if dom_id else ""
             missing = [label for label, v in current_doc_values.items() if v != "Received"]
@@ -1002,10 +1009,6 @@ def render_escalations_panel(call_sheet, call_df, docs_sheet, docs_df):
                 resolved_updates[reset_col] = reset_value
 
             save_updates(target_sheet, target_df, e["sheet_row"], resolved_updates)
-            if e["source"] == "Onboarding Call":
-                load_call_data.clear()
-            else:
-                load_docs_data.clear()
 
             resolve_msg = "✅ *Case Resolved* — " + e["source"] + "\nDriver: " + str(e["driver_name"]) + " (" + str(e["driver_id"]) + ")\nDOM: " + e["dom"]
             if resolution_note and resolution_note.strip():
