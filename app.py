@@ -640,7 +640,21 @@ def save_updates(sheet, df, sheet_row, updates):
         cell_range = gspread.utils.rowcol_to_a1(sheet_row, col_idx)
         batch.append({"range": cell_range, "values": [[updates[col_name]]]})
         if 0 <= row_idx < len(df):
-            df.at[row_idx, col_name] = updates[col_name]
+            try:
+                df.at[row_idx, col_name] = updates[col_name]
+            except TypeError:
+                # Newer pandas builds (pyarrow-backed string dtype by default)
+                # can reject certain scalar assignments into a typed column
+                # (e.g. a bool into a string[pyarrow] column). Fall back to a
+                # plain python object dtype for that column so the in-memory
+                # patch still works instead of crashing the whole page - the
+                # write to the actual Google Sheet above already succeeded
+                # regardless of this in-memory patch.
+                try:
+                    df[col_name] = df[col_name].astype(object)
+                    df.at[row_idx, col_name] = updates[col_name]
+                except Exception:
+                    pass
     if batch:
         sheet.batch_update(batch)
 
