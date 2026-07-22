@@ -475,6 +475,58 @@ def build_due_date_debug(df):
     return rows
 
 
+def build_docs_due_date_debug(df):
+    """
+    Same diagnostic as build_due_date_debug(), but for the single Docs
+    Tracker due-date column (Docs_Call_Due_Date / Docs_Status), since Docs
+    checks only fire once per driver (D+12) rather than across 7 stages.
+    """
+    today = today_ist()
+    due_col = "Docs_Call_Due_Date"
+    status_col = "Docs_Status"
+    if due_col not in df.columns:
+        return [{
+            "Due Column": due_col,
+            "Non-blank cells": 0,
+            "Parse failures": 0,
+            "Matching today": 0,
+            "Pending + matching today": 0,
+            "Sample raw value": "COLUMN NOT FOUND IN SHEET",
+        }]
+
+    total_nonblank = 0
+    parse_failures = 0
+    matching_today = 0
+    pending_matching_today = 0
+    sample_raw = None
+
+    for idx, val in df[due_col].items():
+        if val is None or str(val).strip() == "":
+            continue
+        total_nonblank += 1
+        if sample_raw is None:
+            sample_raw = repr(val)
+        parsed = parse_date(val)
+        if parsed is None:
+            parse_failures += 1
+            continue
+        if parsed == today:
+            matching_today += 1
+            status = df.at[idx, status_col] if status_col in df.columns else "Pending"
+            status = status or "Pending"
+            if str(status).strip() == "Pending":
+                pending_matching_today += 1
+
+    return [{
+        "Due Column": due_col,
+        "Non-blank cells": total_nonblank,
+        "Parse failures": parse_failures,
+        "Matching today": matching_today,
+        "Pending + matching today": pending_matching_today,
+        "Sample raw value": sample_raw if sample_raw is not None else "(no non-blank cells found)",
+    }]
+
+
 def build_call_due_list(df):
     today = today_ist()
     due = []
@@ -837,7 +889,7 @@ def render_call_detail(item, sheet, df, unique_key):
             if st.button("🔁 Follow-up Tomorrow", key="followup_" + unique_key, use_container_width=True):
                 updates = dict(base_updates)
                 tomorrow = today_ist() + timedelta(days=1)
-                updates[item["due_col"]] = tomorrow.strftime("%d/%m/%Y")
+                updates[item["due_col"]] = tomorrow.strftime("%Y-%m-%d")
                 updates[item["status_col"]] = "Pending"
                 updates[item["followup_flag_col"]] = True
                 updates["Escalation_Status"] = ""
@@ -1272,6 +1324,19 @@ def main():
 
         render_generic_tab(call_due, call_sheet, call_df, "call", render_call_detail)
     elif view == "📄 Documentation Tracker":
+        with st.expander("🔧 Debug: why aren't some doc checks showing as due today?"):
+            st.caption("Today (IST): " + str(today_ist()))
+            docs_debug_rows = build_docs_due_date_debug(docs_df)
+            st.dataframe(pd.DataFrame(docs_debug_rows), use_container_width=True, hide_index=True)
+            st.caption(
+                "'Non-blank cells' = rows with a due date set at all. "
+                "'Parse failures' = cells that couldn't be read as a date (format/timezone issue). "
+                "'Matching today' = cells that parsed to today's date. "
+                "'Pending + matching today' = what actually shows up in the due list below - "
+                "if this is 0 while 'Matching today' is higher, the row's status isn't 'Pending' anymore. "
+                "'Sample raw value' shows exactly what's in the cell, useful for spotting a date-format mismatch."
+            )
+
         with st.expander("✏️ Search & edit any record (document arrived late, wrong entry, etc.)"):
             edit_search_docs = st.text_input("🔍 Search by driver name or ID", key="edit_search_docs", placeholder="Type a name or Driver ID...")
             if edit_search_docs and edit_search_docs.strip():
