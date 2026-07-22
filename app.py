@@ -61,7 +61,7 @@ Agent: Sir/Ma'am, hum aapko ek chota sa follow-up call kar rahe hain, aapke vehi
 4. Sir/Ma'am, aapka time dene ke liye bahut dhanyavaad. Agar aapko aage payment ya document ya koi query ho, toh aap humein contact kar sakte hain. Battery Smart family mein aapka saath dene ke liye shukriya!"""
 
 CALL_STATUS_OPTIONS = ["Pending", "Call Attempted", "Escalated to DOM", "Follow-up Needed"]
-DOCS_STATUS_OPTIONS = ["Pending", "Documents Received", "Not Received", "Escalated to DOM"]
+DOCS_STATUS_OPTIONS = ["Pending", "Call Attempted", "Documents Received", "Not Received", "Escalated to DOM"]
 DFE_OPTIONS = ["Not Checked", "Yes", "No"]
 
 STATUS_DOT = {
@@ -384,6 +384,66 @@ def fmt_money(val):
     if text == "" or text.lower() == "nan":
         return "—"
     return "Rs " + text
+
+
+def build_due_date_debug(df):
+    """
+    Self-serve diagnostic for "why isn't a D+N call showing as due today".
+    For each configured call stage, reports how many rows have a non-blank
+    due-date cell, how many of those fail to parse at all, how many parse to
+    exactly today, and one sample raw cell value so a format/timezone
+    mismatch (e.g. an ISO timestamp or MM/DD vs DD/MM string) is visible at
+    a glance without needing to dig through the Apps Script logs.
+    """
+    today = today_ist()
+    rows = []
+    for stage in CALL_STAGES:
+        due_col, status_col, _, _ = call_stage_columns(stage)
+        if due_col not in df.columns:
+            rows.append({
+                "Stage": "D+" + str(stage),
+                "Due Column": due_col,
+                "Non-blank cells": 0,
+                "Parse failures": 0,
+                "Matching today": 0,
+                "Pending + matching today": 0,
+                "Sample raw value": "COLUMN NOT FOUND IN SHEET",
+            })
+            continue
+
+        total_nonblank = 0
+        parse_failures = 0
+        matching_today = 0
+        pending_matching_today = 0
+        sample_raw = None
+
+        for idx, val in df[due_col].items():
+            if val is None or str(val).strip() == "":
+                continue
+            total_nonblank += 1
+            if sample_raw is None:
+                sample_raw = repr(val)
+            parsed = parse_date(val)
+            if parsed is None:
+                parse_failures += 1
+                continue
+            if parsed == today:
+                matching_today += 1
+                status = df.at[idx, status_col] if status_col in df.columns else "Pending"
+                status = status or "Pending"
+                if str(status).strip() == "Pending":
+                    pending_matching_today += 1
+
+        rows.append({
+            "Stage": "D+" + str(stage),
+            "Due Column": due_col,
+            "Non-blank cells": total_nonblank,
+            "Parse failures": parse_failures,
+            "Matching today": matching_today,
+            "Pending + matching today": pending_matching_today,
+            "Sample raw value": sample_raw if sample_raw is not None else "(no non-blank cells found)",
+        })
+    return rows
 
 
 def build_call_due_list(df):
@@ -873,9 +933,16 @@ def render_docs_detail(item, sheet, df, unique_key):
     st.write("")
     all_collected = all(v == "Received" for v in current_doc_values.values())
 
-    bfoot1, bfoot2 = st.columns(2)
+    bfoot1, bfoot2, bfoot3 = st.columns(3)
     with bfoot1:
-        if st.button("✅ Mark All Documents Received", key="docsdone_" + unique_key, type="primary", use_container_width=True):
+        if st.button("✅ Call Attempted", key="docscall_" + unique_key, type="primary", use_container_width=True):
+            updates = {"Docs_Notes": notes, "Docs_Status": "Call Attempted", "Escalation_Status": ""}
+            save_updates(sheet, df, item["sheet_row"], updates)
+            load_docs_data.clear()
+            st.toast("Marked as attempted!", icon="✅")
+            st.rerun()
+    with bfoot2:
+        if st.button("📥 Mark All Documents Received", key="docsdone_" + unique_key, use_container_width=True):
             updates = {
                 "Docs_Notes": notes,
                 "Docs_Status": "Documents Received",
@@ -888,7 +955,7 @@ def render_docs_detail(item, sheet, df, unique_key):
             load_docs_data.clear()
             st.toast("All documents marked received!", icon="✅")
             st.rerun()
-    with bfoot2:
+    with bfoot3:
         if st.button("🚨 Escalate to DOM", key="docsescalate_" + unique_key, use_container_width=True):
             docs_status = "Documents Received" if all_collected else "Not Received"
             updates = {"Docs_Notes": notes, "Docs_Status": docs_status, "Escalation_Status": "Open"}
@@ -1143,6 +1210,19 @@ def main():
                 st.error("Slack test FAILED: " + err)
 
     if view == "📞 Onboarding Call Tracker":
+        with st.expander("🔧 Debug: why aren't some calls showing as due today?"):
+            st.caption("Today (IST): " + str(today_ist()))
+            debug_rows = build_due_date_debug(call_df)
+            st.dataframe(pd.DataFrame(debug_rows), use_container_width=True, hide_index=True)
+            st.caption(
+                "'Non-blank cells' = rows with a due date set at all for that stage. "
+                "'Parse failures' = cells that couldn't be read as a date (format/timezone issue). "
+                "'Matching today' = cells that parsed to today's date. "
+                "'Pending + matching today' = what actually shows up in the due list below - "
+                "if this is 0 while 'Matching today' is higher, the row's status isn't 'Pending' anymore. "
+                "'Sample raw value' shows exactly what's in the cell, useful for spotting a date-format mismatch."
+            )
+
         with st.expander("✏️ Search & edit any record (past calls, wrong result, callback later, etc.)"):
             edit_search = st.text_input("🔍 Search by driver name or ID", key="edit_search_call", placeholder="Type a name or Driver ID...")
             if edit_search and edit_search.strip():
