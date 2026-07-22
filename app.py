@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 IST = ZoneInfo("Asia/Kolkata")
 def today_ist():
     return datetime.now(IST).date()
+import re
 import gspread
 from google.oauth2.service_account import Credentials
 
@@ -353,14 +354,42 @@ def get_docs_sheet():
     return spreadsheet.worksheet(DOCS_SHEET_TAB)
 
 
+def normalize_columns(df):
+    """
+    Normalizes sheet header names in-memory so a small formatting difference
+    in the actual Google Sheet header row (e.g. "Invoice Status" instead of
+    "Invoice_Status" - a real mismatch found in this spreadsheet, which
+    silently made every Invoice checklist write a no-op) doesn't break
+    lookups. Collapses internal whitespace to a single underscore and strips
+    leading/trailing whitespace. Never renames a column if doing so would
+    collide with another column's name (existing or already-renamed), so
+    this is a pure safety net and never merges two distinct columns.
+    Does NOT touch the actual Google Sheet - only the in-memory dataframe
+    used for column lookups (save_updates() computes the write position from
+    this same dataframe's column order, so a rename here still points at the
+    correct physical cell).
+    """
+    seen = set(df.columns)
+    new_cols = []
+    for c in df.columns:
+        normalized = re.sub(r"\s+", "_", str(c).strip())
+        if normalized == c or normalized in seen:
+            new_cols.append(c)
+        else:
+            new_cols.append(normalized)
+            seen.add(normalized)
+    df.columns = new_cols
+    return df
+
+
 @st.cache_data(ttl=180)
 def load_call_data(_sheet):
-    return pd.DataFrame(_sheet.get_all_records())
+    return normalize_columns(pd.DataFrame(_sheet.get_all_records()))
 
 
 @st.cache_data(ttl=180)
 def load_docs_data(_sheet):
-    return pd.DataFrame(_sheet.get_all_records())
+    return normalize_columns(pd.DataFrame(_sheet.get_all_records()))
 
 
 def parse_date(val):
@@ -1065,7 +1094,7 @@ def render_escalations_panel(call_sheet, call_df, docs_sheet, docs_df):
             resolved_updates = {"Escalation_Status": "Resolved"}
             reset_col = e.get("escalated_status_col")
             if reset_col:
-                reset_value = "Call Attempted" if e["source"] == "Onboarding Call" else "Documents Received"
+                reset_value = "Call Attempted"  # neutral "handled" status, same for both trackers
                 resolved_updates[reset_col] = reset_value
 
             save_updates(target_sheet, target_df, e["sheet_row"], resolved_updates)
