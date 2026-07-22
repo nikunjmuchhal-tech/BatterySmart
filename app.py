@@ -37,10 +37,11 @@ Agent: Ek baar phir se, Battery Smart family mein aapka swagat hai. Have a great
 
 CALL_2_SCRIPT = CALL_SCRIPT
 
-# Which onboarding-call stages are currently active. Scaling initially covers
-# D+1 through D+7; once volume settles down, just change this list back to
-# [1, 2] to reduce to the original D+1/D+2 flow - no other code changes needed.
-CALL_STAGES = [1, 2, 3, 4, 5, 6, 7]
+# Which onboarding-call stages are currently active. D+2 was removed per
+# request - the flow is now D+1, then D+3 through D+7 (no D+2 call). To
+# change which stages are active, just edit this list - no other code
+# changes needed anywhere else in the file.
+CALL_STAGES = [1, 3, 4, 5, 6, 7]
 
 
 def call_stage_columns(stage):
@@ -479,7 +480,7 @@ def build_docs_due_date_debug(df):
     """
     Same diagnostic as build_due_date_debug(), but for the single Docs
     Tracker due-date column (Docs_Call_Due_Date / Docs_Status), since Docs
-    checks only fire once per driver (D+12) rather than across 7 stages.
+    checks only fire once per driver (D+10) rather than across multiple stages.
     """
     today = today_ist()
     due_col = "Docs_Call_Due_Date"
@@ -1370,4 +1371,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
